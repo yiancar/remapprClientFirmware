@@ -1,0 +1,467 @@
+{
+    "7": {
+        "30": {
+            "short": "1"
+        },
+        "31": {
+            "short": "2"
+        },
+        "32": {
+            "short": "3"
+        },
+        "33": {
+            "short": "4"
+        },
+        "34": {
+            "short": "5"
+        },
+        "35": {
+            "short": "6"
+        },
+        "36": {
+            "short": "7"
+        },
+        "37": {
+            "short": "8"
+        },
+        "38": {
+            "short": "9"
+        },
+        "39": {
+            "short": "0"
+        },
+        "40": {
+            "short": "Ret",
+            "med": "Return"
+        },
+        "41": {
+            "short": "Esc",
+            "long": "Escape"
+        },
+        "42": {
+            "short": "BkSp",
+            "med": "BkSpc",
+            "long": "Backspace"
+        },
+        "44": {
+            "short": "␣",
+            "med": "Space"
+        },
+        "45": {
+            "short": "-",
+            "med": "Dash"
+        },
+        "46": {
+            "short": "=",
+            "med": "Equals"
+        },
+        "47": {
+            "short": "{"
+        },
+        "48": {
+            "short": "}"
+        },
+        "49": {
+            "short": "\\"
+        },
+        "50": {
+            "short": "NUHS",
+            "long": "NonUS Hash"
+        },
+        "51": {
+            "short": ";"
+        },
+        "52": {
+            "short": "'"
+        },
+        "53": {
+            "short": "`"
+        },
+        "54": {
+            "short": ","
+        },
+        "55": {
+            "short": "."
+        },
+        "56": {
+            "short": "/"
+        },
+        "57": {
+            "short": "Cap",
+            "long": "Caps Lock"
+        },
+        "70": {
+            "short": "PrSc",
+            "long": "Print Scr"
+        },
+        "71": {
+            "short": "ScLk",
+            "long": "ScrollLock"
+        },
+        "72": {
+            "short": "Paus",
+            "med": "Pause"
+        },
+        "73": {
+            "short": "Ins",
+            "med": "Insert"
+        },
+        "75": {
+            "short": "PgUp",
+            "med": "PageUp",
+            "long": "Page Up"
+        },
+        "76": {
+            "short": "Del",
+            "med": "Delete"
+        },
+        "78": {
+            "short": "PgDn",
+            "med": "PageDn",
+            "long": "Page Down"
+        },
+        "79": {
+            "short": "→"
+        },
+        "80": {
+            "short": "←"
+        },
+        "81": {
+            "short": "↓"
+        },
+        "82": {
+            "short": "↑"
+        },
+        "83": {
+            "short": "Num",
+            "med": "NumLck",
+            "long": "Num Lock"
+        },
+        "84": {
+            "short": "/"
+        },
+        "85": {
+            "short": "*"
+        },
+        "86": {
+            "short": "-"
+        },
+        "87": {
+            "short": "+"
+        },
+        "88": {
+            "short": "Ent",
+            "med": "KP Ent",
+            "long": "KP Enter"
+        },
+        "89": {
+            "short": "1 En",
+            "med": "1 End"
+        },
+        "90": {
+            "short": "2 ↓"
+        },
+        "91": {
+            "short": "3 PD",
+            "med": "3 PgDn"
+        },
+        "92": {
+            "short": "4 ←"
+        },
+        "93": {
+            "short": "5"
+        },
+        "94": {
+            "short": "6 →"
+        },
+        "95": {
+            "short": "7 Hm",
+            "med": "7 Home"
+        },
+        "96": {
+            "short": "8 ↑"
+        },
+        "97": {
+            "short": "9 PU",
+            "med": "9 PgUp"
+        },
+        "98": {
+            "short": "0 In",
+            "med": "0 Ins",
+            "long": "0 Insert"
+        },
+        "99": {
+            "short": ". Dl",
+            "med": ". Del",
+            "long": ". Delete"
+        },
+        "101": {
+            "short": "Appl",
+            "med": "Appl",
+            "long": "Applicat'n"
+        },
+        "102": {
+            "short": "Power",
+            "med": "Power"
+        },
+        "100": {
+            "short": "NUBS"
+        },
+        "103": {
+            "short": "KP=",
+            "med": "KP Eq",
+            "long": "KP Equals"
+        },
+        "130": {
+            "short": "LCap",
+            "med": "Lk Caps",
+            "long": "Locking Caps"
+        },
+        "131": {
+            "short": "LNum",
+            "med": "Lk Num",
+            "long": "Locking Num"
+        },
+        "132": {
+            "short": "LScr",
+            "med": "Lk Scrl",
+            "long": "Locking Scroll"
+        },
+        "133": {
+            "short": ","
+        },
+        "134": {
+            "short": "KP=2",
+            "med": "KP AS400",
+            "long": "KP Equal AS400"
+        },
+        "176": {
+            "short": "00"
+        },
+        "177": {
+            "short": "000"
+        },
+        "178": {
+            "short": "1,000",
+            "long": "Thousands Sep."
+        },
+        "179": {
+            "short": "0.1",
+            "long": "Decimal Sep."
+        },
+        "180": {
+            "short": "$",
+            "long": "Currency Unit"
+        },
+        "181": {
+            "short": "¢",
+            "long": "Currency Sub-unit"
+        },
+        "182": {
+            "short": "KP[",
+            "long": "KP Left Bracket"
+        },
+        "183": {
+            "short": "KP]",
+            "long": "KP Right Bracket"
+        },
+        "184": {
+            "short": "KP{",
+            "long": "KP Left Brace"
+        },
+        "185": {
+            "short": "KP}",
+            "long": "KP Right Brace"
+        },
+        "186": {
+            "short": "KP Tab"
+        },
+        "188": {
+            "short": "KP A"
+        },
+        "189": {
+            "short": "KP B"
+        },
+        "190": {
+            "short": "KP C"
+        },
+        "191": {
+            "short": "KP D"
+        },
+        "192": {
+            "short": "KP E"
+        },
+        "193": {
+            "short": "KP F"
+        },
+        "194": {
+            "short": "KP XOR"
+        },
+        "195": {
+            "short": "KP^",
+            "long": "KP Caret"
+        },
+        "196": {
+            "short": "KP%",
+            "long": "KP Percent"
+        },
+        "197": {
+            "short": "KP<",
+            "long": "KP Less"
+        },
+        "198": {
+            "short": "KP>",
+            "long": "KP Greater"
+        },
+        "199": {
+            "short": "KP&",
+            "long": "KP Ampersand"
+        },
+        "200": {
+            "short": "KP&&",
+            "long": "KP Double Amp"
+        },
+        "201": {
+            "short": "KP|",
+            "long": "KP Bar"
+        },
+        "202": {
+            "short": "KP||",
+            "long": "KP Double Bar"
+        },
+        "203": {
+            "short": "KP:",
+            "long": "KP Colon"
+        },
+        "204": {
+            "short": "KP#",
+            "long": "KP Hash"
+        },
+        "205": {
+            "short": "KP ␣",
+            "long": "KP Space"
+        },
+        "206": {
+            "short": "KP @"
+        },
+        "207": {
+            "short": "KP!",
+            "long": "KP Bang"
+        },
+        "208": {
+            "short": "KP MS",
+            "long": "KP Memory Store"
+        },
+        "209": {
+            "short": "KP MR",
+            "long": "KP Memory Recall"
+        },
+        "210": {
+            "short": "KP MC",
+            "long": "KP Memory Clear"
+        },
+        "211": {
+            "short": "KP M+",
+            "long": "KP Memory Add"
+        },
+        "212": {
+            "short": "KP M-",
+            "long": "KP Memory Subtract"
+        },
+        "213": {
+            "short": "KP M*",
+            "long": "KP Memory Multiply"
+        },
+        "214": {
+            "short": "KP M/",
+            "long": "KP Memory Divide"
+        },
+        "215": {
+            "short": "KP±",
+            "long": "KP Plus/Minus"
+        },
+        "217": {
+            "short": "KP CE",
+            "long": "KP Clear Entry"
+        },
+        "218": {
+            "short": "KP Bin",
+            "long": "KP Binary"
+        },
+        "219": {
+            "short": "KP Oct",
+            "long": "KP Octal"
+        },
+        "220": {
+            "short": "KP Dec",
+            "long": "KP Decimal"
+        },
+        "221": {
+            "short": "KP Hex",
+            "long": "KP Hexadecimal"
+        },
+        "224": {
+            "short": "Ctrl",
+            "med": "L Ctrl"
+        },
+        "225": {
+            "short": "Shft",
+            "med": "L Shft",
+            "long": "L Shift"
+        },
+        "226": {
+            "short": "Alt",
+            "med": "L Alt",
+            "long": "Left Alt"
+        },
+        "227": {
+            "short": "GUI",
+            "med": "L GUI",
+            "long": "Left GUI"
+        },
+        "228": {
+            "short": "Ctrl",
+            "med": "R Ctrl"
+        },
+        "229": {
+            "short": "Shft",
+            "med": "R Shft",
+            "long": "R Shift"
+        },
+        "230": {
+            "short": "AltG",
+            "med": "AltGr"
+        },
+        "231": {
+            "short": "GUI",
+            "med": "R GUI",
+            "long": "Right GUI"
+        }
+    },
+    "12": {
+        "111": {
+            "short": "🔆"
+        },
+        "112": {
+            "short": "🔅"
+        },
+        "181": {
+            "short": "⇥"
+        },
+        "182": {
+            "short": "⇤"
+        },
+        "205": {
+            "short": "⏯️"
+        },
+        "226": {
+            "short": "🔇"
+        },
+        "233": {
+            "short": "🔊"
+        },
+        "234": {
+            "short": "🔉"
+        }
+    }
+}

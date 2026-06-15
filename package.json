@@ -1,0 +1,54 @@
+{
+  "name": "@remappr/firmware",
+  "version": "0.1.0",
+  "description": "Remappr client firmware: canonical keymap config, catalog, and per-firmware protocol/codec/service/adapter layers. Transport-agnostic, browser + node safe.",
+  "license": "MIT",
+  "author": "Wolffyx <wolffyx@wolffyx.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wolffyx/remapprClientFirmware.git"
+  },
+  "type": "module",
+  "comment:sideEffects": "Intentionally side-effectful: importing a firmware barrel or the config module registers its adapter/compiler in the global registries. Do not set sideEffects:false.",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./*.json": "./dist/*.json",
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "lzma1": "^0.3.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@zmkfirmware/zmk-studio-ts-client": "^0.0.18"
+  },
+  "devDependencies": {
+    "@zmkfirmware/zmk-studio-ts-client": "^0.0.18",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "protobufjs"]
+  }
+}

@@ -1,0 +1,266 @@
+{
+    "schemaVersion": 1,
+    "kind": "remappr.keymap",
+    "meta": {
+        "name": "Mock Corne",
+        "author": "remappr",
+        "version": "1.0.0",
+        "description": "36-key Corne — the demo device. Source of truth for the demo: the runtime editing buffer is lowered from this config, edits raise back into it, and download compiles it per firmware. Base layer mirrors a QWERTY + home-row-mods layout; the lower/raise layers exercise firmware-gated features.",
+        "target": null
+    },
+    "defaults": {
+        "tappingTermMs": 200,
+        "quickTapMs": 150,
+        "comboTimeoutMs": 50
+    },
+    "keyboard": {
+        "id": "mock_corne",
+        "name": "Mock Corne",
+        "keys": [
+            { "x": 0, "y": 0 },
+            { "x": 1, "y": 0 },
+            { "x": 2, "y": 0 },
+            { "x": 3, "y": 0 },
+            { "x": 4, "y": 0 },
+            { "x": 0, "y": 1 },
+            { "x": 1, "y": 1 },
+            { "x": 2, "y": 1 },
+            { "x": 3, "y": 1 },
+            { "x": 4, "y": 1 },
+            { "x": 0, "y": 2 },
+            { "x": 1, "y": 2 },
+            { "x": 2, "y": 2 },
+            { "x": 3, "y": 2 },
+            { "x": 4, "y": 2 },
+            { "x": 1, "y": 3 },
+            { "x": 2, "y": 3 },
+            { "x": 3, "y": 3 },
+            { "x": 7, "y": 0 },
+            { "x": 8, "y": 0 },
+            { "x": 9, "y": 0 },
+            { "x": 10, "y": 0 },
+            { "x": 11, "y": 0 },
+            { "x": 7, "y": 1 },
+            { "x": 8, "y": 1 },
+            { "x": 9, "y": 1 },
+            { "x": 10, "y": 1 },
+            { "x": 11, "y": 1 },
+            { "x": 7, "y": 2 },
+            { "x": 8, "y": 2 },
+            { "x": 9, "y": 2 },
+            { "x": 10, "y": 2 },
+            { "x": 11, "y": 2 },
+            { "x": 8, "y": 3 },
+            { "x": 9, "y": 3 },
+            { "x": 10, "y": 3 }
+        ],
+        "encoders": [{ "x": 5, "y": 0 }]
+    },
+    "layers": [
+        {
+            "name": "base",
+            "description": "QWERTY with home-row mods and thumb layer-taps.",
+            "bindings": [
+                "Q",
+                "W",
+                "E",
+                "R",
+                "T",
+                { "type": "mod_tap", "tap": "A", "mod": "LEFT_GUI" },
+                { "type": "mod_tap", "tap": "S", "mod": "LEFT_ALT" },
+                { "type": "mod_tap", "tap": "D", "mod": "LEFT_CTRL" },
+                { "type": "mod_tap", "tap": "F", "mod": "LEFT_SHIFT" },
+                "G",
+                "Z",
+                "X",
+                "C",
+                "V",
+                "B",
+                "ESCAPE",
+                {
+                    "type": "layer_tap",
+                    "tap": "SPACE",
+                    "layer": "raise",
+                    "resolve": "prefer-hold"
+                },
+                "TAB",
+                "Y",
+                "U",
+                "I",
+                "O",
+                "P",
+                "H",
+                { "type": "mod_tap", "tap": "J", "mod": "LEFT_SHIFT" },
+                { "type": "mod_tap", "tap": "K", "mod": "LEFT_CTRL" },
+                { "type": "mod_tap", "tap": "L", "mod": "LEFT_ALT" },
+                { "type": "mod_tap", "tap": "SEMICOLON", "mod": "LEFT_GUI" },
+                "N",
+                "M",
+                "COMMA",
+                "DOT",
+                "SLASH",
+                "ENTER",
+                {
+                    "type": "layer_tap",
+                    "tap": "BACKSPACE",
+                    "layer": "lower",
+                    "resolve": "prefer-hold"
+                },
+                "DELETE"
+            ],
+            "encoders": [{ "cw": "Volume Up", "ccw": "Volume Down" }]
+        },
+        {
+            "name": "lower",
+            "description": "Numbers, navigation and editing (held via the right thumb).",
+            "bindings": [
+                "N1",
+                "N2",
+                "N3",
+                "N4",
+                "N5",
+                "LEFT",
+                "DOWN",
+                "UP",
+                "RIGHT",
+                { "type": "layer", "mode": "momentary", "layer": "raise" },
+                "Ctrl+C",
+                "Ctrl+V",
+                { "type": "caps_word" },
+                { "type": "tap_dance", "ref": "esc_grave" },
+                "GRAVE",
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                "N6",
+                "N7",
+                "N8",
+                "N9",
+                "N0",
+                "PAGE_UP",
+                "PAGE_DOWN",
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" }
+            ],
+            "encoders": [{ "cw": "PAGE_DOWN", "ccw": "PAGE_UP" }]
+        },
+        {
+            "name": "raise",
+            "description": "Device controls — exercises firmware-gated features.",
+            "bindings": [
+                { "type": "output", "action": "usb" },
+                { "type": "output", "action": "bluetooth", "profile": 0 },
+                { "type": "output", "action": "bluetooth", "profile": 1 },
+                { "type": "output", "action": "bluetooth_clear" },
+                {
+                    "type": "lighting",
+                    "target": "underglow",
+                    "action": "toggle"
+                },
+                {
+                    "type": "lighting",
+                    "target": "underglow",
+                    "action": "brightness_up"
+                },
+                {
+                    "type": "lighting",
+                    "target": "underglow",
+                    "action": "brightness_down"
+                },
+                {
+                    "type": "lighting",
+                    "target": "per_key",
+                    "action": "effect_next"
+                },
+                { "type": "bootloader" },
+                { "type": "reset" },
+                { "type": "none" },
+                { "type": "macro", "ref": "lock_screen" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" },
+                { "type": "transparent" }
+            ],
+            "encoders": [
+                {
+                    "cw": {
+                        "type": "lighting",
+                        "target": "underglow",
+                        "action": "brightness_up"
+                    },
+                    "ccw": {
+                        "type": "lighting",
+                        "target": "underglow",
+                        "action": "brightness_down"
+                    }
+                }
+            ]
+        }
+    ],
+    "combos": [
+        {
+            "name": "esc",
+            "keys": [0, 1],
+            "action": "ESCAPE",
+            "timeoutMs": 50,
+            "layers": ["base"]
+        },
+        {
+            "name": "tab",
+            "keys": [5, 6],
+            "action": "TAB"
+        }
+    ],
+    "tapDances": [
+        {
+            "id": "esc_grave",
+            "description": "1 tap = Esc, 2 taps = grave, hold = Left GUI.",
+            "tappingTermMs": 200,
+            "taps": [
+                { "count": 1, "action": "ESCAPE" },
+                { "count": 2, "action": "GRAVE" }
+            ],
+            "hold": { "type": "modifier", "modifier": "LEFT_GUI" }
+        }
+    ],
+    "macros": [
+        {
+            "id": "lock_screen",
+            "description": "Hold GUI, tap L, release GUI (lock the screen).",
+            "steps": [
+                { "type": "press", "key": "LEFT_GUI" },
+                { "type": "tap", "key": "L" },
+                { "type": "release", "key": "LEFT_GUI" }
+            ]
+        }
+    ]
+}

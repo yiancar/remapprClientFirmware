@@ -1,0 +1,195 @@
+export interface KeyAction {
+    kind: string
+    params: number[]
+    label: KeyLabel
+    /** Resolved canonical catalog id when codec.decode recognized the keycode.
+     *  Picker uses this to re-highlight the originating entry without rerunning
+     *  decode every render. Optional — adapters populate when known. */
+    canonicalId?: string
+}
+
+export interface HoldTapLabelData {
+    actionTypeName: string
+    actionLabel: string
+    tapParam: number
+    tapDesc: string
+    holdNodeKind: 'layer' | 'usage'
+    holdParam: number
+    holdLayerLabel?: string
+    holdLayerMomentary?: string
+    holdLayerName?: string
+    holdUsageDesc?: string
+    tooltip: string
+}
+
+export interface KeyLabel {
+    primary: string
+    primaryUsage?: number
+    secondary?: string
+    modifiers?: string
+    description?: string
+    bindingPrefix?: string
+    holdTap?: HoldTapLabelData
+}
+
+// Pattern check: no GoF pattern (-) — rejected — additive optional fields on plain data interfaces; no abstraction.
+export interface EncoderAction {
+    cw: KeyAction
+    ccw: KeyAction
+}
+
+export interface Layer {
+    id: number
+    name: string
+    keys: KeyAction[]
+    encoders?: EncoderAction[]
+}
+
+export interface PhysicalLayoutKey {
+    x: number
+    y: number
+    w: number
+    h: number
+    r?: number
+    rx?: number
+    ry?: number
+}
+
+export interface EncoderSlot {
+    x: number
+    y: number
+}
+
+export interface PhysicalLayout {
+    id: number
+    name: string
+    keys: PhysicalLayoutKey[]
+    encoders?: EncoderSlot[]
+}
+
+export interface Keymap {
+    layers: Layer[]
+    availableLayers: number
+    activeLayoutId: number
+    layouts: PhysicalLayout[]
+}
+
+export interface ActionType {
+    id: string
+    displayName: string
+    description?: string
+    slots: ActionSlot[]
+}
+
+export type ActionSlotKind =
+    | 'hid'
+    | 'modifier'
+    | 'layer'
+    | 'number'
+    | 'enum'
+    | 'action'
+
+export interface ActionSlot {
+    label: string
+    kind: ActionSlotKind
+    values?: { value: number; label: string }[]
+    range?: { min: number; max: number }
+    innerKinds?: string[]
+}
+
+export interface DeviceInfo {
+    name: string
+    firmware: string
+    firmwareVersion?: string
+    serialNumber?: string
+    // pattern-check: skip — additive optional scalar fields for VIA registry cache key
+    vid?: number
+    pid?: number
+}
+
+export type LockState = 'locked' | 'unlocking' | 'unlocked' | 'not-applicable'
+
+// Treats 'not-applicable' (firmware without lock semantics, e.g. VIA) as unlocked.
+export const isUnlocked = (s: LockState): boolean =>
+    s === 'unlocked' || s === 'not-applicable'
+
+export interface AdapterNotification {
+    topic: string
+    payload: unknown
+}
+
+export interface KeyUpdate {
+    layerId: number
+    position: number
+    action: KeyAction
+}
+
+export interface ExportedFile {
+    filename: string
+    mime: string
+    content: string | Uint8Array
+}
+
+export type TransportKind = 'serial' | 'ble' | 'hid'
+
+// pattern-check: skip plain data shapes for Vial dynamic entries; no abstraction
+export interface TapDanceEntry {
+    onTap: number
+    onHold: number
+    onDoubleTap: number
+    onTapHold: number
+    tappingTerm: number
+}
+
+export interface ComboEntry {
+    keys: [number, number, number, number]
+    output: number
+}
+
+export interface KeyOverrideOptions {
+    activationTriggerDown: boolean
+    activationRequiredModDown: boolean
+    activationNegativeModUp: boolean
+    oneMod: boolean
+    noReregisterTrigger: boolean
+    noUnregisterOnOtherKeyDown: boolean
+    enabled: boolean
+}
+
+export interface KeyOverrideEntry {
+    trigger: number
+    replacement: number
+    layers: number
+    triggerMods: number
+    negativeModMask: number
+    suppressedMods: number
+    options: KeyOverrideOptions
+}
+
+export interface AltRepeatKeyOptions {
+    defaultToThisAltKey: boolean
+    bidirectional: boolean
+    ignoreModHandedness: boolean
+    enabled: boolean
+}
+
+export interface AltRepeatKeyEntry {
+    keycode: number
+    altKeycode: number
+    allowedMods: number
+    options: AltRepeatKeyOptions
+}
+
+export interface DynamicEntryCounts {
+    tapDance: number
+    combo: number
+    keyOverride: number
+}
+
+// pattern-check: skip discriminated-union data shape for macro actions
+export type MacroAction =
+    | { kind: 'tap'; keycode: number }
+    | { kind: 'down'; keycode: number }
+    | { kind: 'up'; keycode: number }
+    | { kind: 'delay'; ms: number }
+    | { kind: 'text'; text: string }
