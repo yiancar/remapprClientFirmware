@@ -10,11 +10,11 @@ import type {
 import {
     hid_usage_get_labels,
     hidUsagePageAndIdFromUsage,
-} from '@/lib/actions/hidUsages'
+} from '@firmware/_app/lib/actions/hidUsages'
 import {
     abbreviateLayerName,
     formatMomentaryLayer,
-} from '@/lib/keyAbbreviations'
+} from '@firmware/_app/lib/keyAbbreviations'
 import { displayNameToBinding } from './displayNameToBinding'
 import { behaviorToActionType } from './actionTypes'
 

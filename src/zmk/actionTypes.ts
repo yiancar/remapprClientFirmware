@@ -4,7 +4,7 @@ import type {
     GetBehaviorDetailsResponse,
 } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
 import type { ActionSlot, ActionSlotKind, ActionType } from '@firmware/types'
-import { hidUsagePageAndIdFromUsage } from '@/lib/actions/hidUsages'
+import { hidUsagePageAndIdFromUsage } from '@firmware/_app/lib/actions/hidUsages'
 
 const MODIFIER_DISPLAY_NAME = 'Modifier'
 

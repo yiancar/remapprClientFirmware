@@ -22,7 +22,7 @@ import { EXTERNAL_NAMES } from '@firmware/catalog/external-names'
 import {
     hidUsageFromPageAndId,
     hidUsagePageAndIdFromUsage,
-} from '@/lib/actions/hidUsages'
+} from '@firmware/_app/lib/actions/hidUsages'
 import type { BehaviorMap } from './actions'
 import { zmkBindingFromAction } from './actions'
 import { displayNameToBinding } from './displayNameToBinding'
