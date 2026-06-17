@@ -45,6 +45,8 @@ export const BehaviorType = {
     Macro: 11,
     ToggleLayer: 12,
     KeyToggle: 13,
+    KeyRepeat: 14,
+    CapsWord: 15,
 } as const
 
 // enum remappr_macro_op (behavior_table.h §43.5).

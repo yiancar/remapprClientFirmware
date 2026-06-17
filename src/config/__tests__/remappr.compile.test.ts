@@ -198,3 +198,52 @@ describe('remappr layer / toggle / sticky behaviors', () => {
         expect(holdOf(3)).toBe(0x02) // LSHIFT bit (1 << 1)
     })
 })
+
+// key_repeat (§44.3): zero-field BH_KEY_REPEAT (type 14). Firmware replays the
+// last emitted key+mods at runtime, so the wire record carries no payload.
+const REPEAT = `{
+    "schemaVersion": 1, "kind": "remappr.keymap",
+    "meta": { "name": "Rep", "target": "zmk" },
+    "keyboard": { "id": "rep", "name": "Rep", "keys": [{"x":0,"y":0}] },
+    "layers": [{ "name": "base", "bindings": [{ "type": "key_repeat" }] }]
+}`
+
+describe('remappr key_repeat (BH_KEY_REPEAT)', () => {
+    it('lowers to a zero-field type-14 record', () => {
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(REPEAT),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        expect(u16(b, beh[0])).toBe(1) // one behavior record
+        const rec = beh[0] + 2
+        expect(b[rec]).toBe(14) // BehaviorType.KeyRepeat
+        // every remaining field is zero (flavor..subIndex).
+        for (let i = 1; i < 16; i++) expect(b[rec + i]).toBe(0)
+    })
+})
+
+// caps_word (§44.3): zero-field BH_CAPS_WORD (type 15). Firmware toggles a modal
+// auto-shift; the wire record carries no payload.
+const CAPS = `{
+    "schemaVersion": 1, "kind": "remappr.keymap",
+    "meta": { "name": "Caps", "target": "zmk" },
+    "keyboard": { "id": "caps", "name": "Caps", "keys": [{"x":0,"y":0}] },
+    "layers": [{ "name": "base", "bindings": [{ "type": "caps_word" }] }]
+}`
+
+describe('remappr caps_word (BH_CAPS_WORD)', () => {
+    it('lowers to a zero-field type-15 record', () => {
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(CAPS),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        expect(u16(b, beh[0])).toBe(1) // one behavior record
+        const rec = beh[0] + 2
+        expect(b[rec]).toBe(15) // BehaviorType.CapsWord
+        for (let i = 1; i < 16; i++) expect(b[rec + i]).toBe(0)
+    })
+})

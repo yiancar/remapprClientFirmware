@@ -273,6 +273,12 @@ function lowerAction(
             if (usage === null) return rec({ type: BehaviorType.None })
             return rec({ type: BehaviorType.KeyToggle, tap: usage })
         }
+        case 'key_repeat':
+            // Zero-field: firmware replays the last emitted key+mods at runtime.
+            return rec({ type: BehaviorType.KeyRepeat })
+        case 'caps_word':
+            // Zero-field: firmware auto-shifts letters until a word boundary.
+            return rec({ type: BehaviorType.CapsWord })
         default:
             diag.error(
                 `action "${action.type}" not yet supported by the remappr ` +
