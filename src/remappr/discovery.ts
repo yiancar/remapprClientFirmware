@@ -17,6 +17,7 @@ import {
     parsePersonalityMap,
     type PersonalityMap,
     Status,
+    statusName,
 } from './protocol'
 import type { RemapprRpc } from './rpc'
 
@@ -30,14 +31,41 @@ export interface DiscoveryResult {
 }
 
 /**
- * Run the discovery negotiation against a connected RPC. Always reads legacy
- * GET_DEVICE_INFO; on a proto-v2 device it additionally reads the universal
- * personality map and limits. A discovery verb that errors is treated as
- * absent (left undefined) rather than failing the whole probe.
+ * Run the discovery negotiation against a connected RPC. Reads GET_DEVICE_INFO;
+ * on a proto-v2 device it additionally reads the universal personality map and
+ * limits. A discovery verb that errors is treated as absent (left undefined)
+ * rather than failing the whole probe.
+ *
+ * `opts.targetNode` (default 0 = the directly-attached endpoint) addresses a node
+ * behind a dongle: GET_DEVICE_INFO then rides the universal plaintext relay path
+ * (§6.2) instead of the direct legacy frame, and every discovery verb carries the
+ * node's short-id as `target_node`.
  */
-export async function discover(rpc: RemapprRpc): Promise<DiscoveryResult> {
-    const di = await rpc.callPlain(Cmd.GET_DEVICE_INFO)
-    const deviceInfo = parseDeviceInfo(di.data)
+export async function discover(
+    rpc: RemapprRpc,
+    opts: { targetNode?: number } = {},
+): Promise<DiscoveryResult> {
+    const target = opts.targetNode ?? 0
+
+    let diData: Uint8Array
+    if (target === 0) {
+        diData = (await rpc.callPlain(Cmd.GET_DEVICE_INFO)).data
+    } else {
+        // Relayed: legacy verbs keep their number under COMMON, so GET_DEVICE_INFO
+        // travels universal-framed to the node (§6.2) rather than direct.
+        const r = await rpc.callUniversalPlain(
+            Namespace.COMMON,
+            Cmd.GET_DEVICE_INFO,
+            undefined,
+            { targetNode: target },
+        )
+        if (r.status !== Status.OK)
+            throw new Error(
+                `node 0x${target.toString(16)} GET_DEVICE_INFO → ${statusName(r.status)}`,
+            )
+        diData = r.data
+    }
+    const deviceInfo = parseDeviceInfo(diData)
     if (deviceInfo.protoMax < 2) {
         return { protoMax: deviceInfo.protoMax, deviceInfo }
     }
@@ -48,6 +76,8 @@ export async function discover(rpc: RemapprRpc): Promise<DiscoveryResult> {
         const pm = await rpc.callUniversalPlain(
             Namespace.COMMON,
             CommonVerb.GET_PERSONALITY_MAP,
+            undefined,
+            { targetNode: target },
         )
         if (pm.status === Status.OK) personality = parsePersonalityMap(pm.data)
     } catch {
@@ -57,6 +87,8 @@ export async function discover(rpc: RemapprRpc): Promise<DiscoveryResult> {
         const lim = await rpc.callUniversalPlain(
             Namespace.COMMON,
             CommonVerb.GET_LIMITS,
+            undefined,
+            { targetNode: target },
         )
         if (lim.status === Status.OK) limits = parseLimits(lim.data)
     } catch {

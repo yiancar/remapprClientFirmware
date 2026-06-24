@@ -22,11 +22,17 @@ const u16le = (v: number): Uint8Array =>
     Uint8Array.of(v & 0xff, (v >> 8) & 0xff)
 
 /** Fetch the device's real per-key layout over the universal KEYBOARD verbs.
- *  Returns null if the device can't answer (caller falls back to synthetic). */
-async function fetchRealLayout(rpc: RemapprRpc): Promise<PhysicalLayout | null> {
+ *  `targetNode` (default 0) addresses a node behind a dongle (§6.2). Returns null
+ *  if the device can't answer (caller falls back to synthetic). */
+async function fetchRealLayout(
+    rpc: RemapprRpc,
+    targetNode = 0,
+): Promise<PhysicalLayout | null> {
     const boundsReply = await rpc.callUniversalPlain(
         Namespace.KEYBOARD,
         KeyboardVerb.GET_KEYMAP_BOUNDS,
+        undefined,
+        { targetNode },
     )
     if (boundsReply.status !== Status.OK) return null
     const bounds = parseKeymapBounds(boundsReply.data)
@@ -40,6 +46,7 @@ async function fetchRealLayout(rpc: RemapprRpc): Promise<PhysicalLayout | null> 
             Namespace.KEYBOARD,
             KeyboardVerb.GET_KEY_LAYOUT,
             u16le(start),
+            { targetNode },
         )
         if (reply.status !== Status.OK) return null
         const chunk = parseKeyLayoutChunk(reply.data)
@@ -80,11 +87,11 @@ function syntheticLayout(keyCount: number): PhysicalLayout {
  */
 export async function fetchPhysicalLayouts(
     rpc: RemapprRpc,
-    opts: { protoMax: number; fallbackKeyCount: number },
+    opts: { protoMax: number; fallbackKeyCount: number; targetNode?: number },
 ): Promise<{ layouts: PhysicalLayout[]; activeLayoutId: number }> {
     if (opts.protoMax >= 2) {
         try {
-            const real = await fetchRealLayout(rpc)
+            const real = await fetchRealLayout(rpc, opts.targetNode ?? 0)
             if (real) return { layouts: [real], activeLayoutId: 0 }
         } catch {
             /* fall through to synthetic */
