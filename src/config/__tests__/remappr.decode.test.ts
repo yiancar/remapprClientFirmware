@@ -217,4 +217,86 @@ describe('remappr round-trip (encode → decode → re-encode is byte-stable)', 
             "conditionalLayers": [{ "ifLayers": ["raise", "lower"], "thenLayer": "adjust" }]
         }`)
     })
+
+    // pattern-check: skip — composite-table (mod-morph / tap-dance) test fixtures
+    it('tap_dance (SUBS table) round-trips + reconstructs the definition', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "TD", "target": "zmk" }, ${kb(2)},
+            "layers": [{ "name": "base", "bindings": [
+                { "type": "tap_dance", "ref": "td_esc" }, "A"
+            ] }],
+            "tapDances": [{
+                "id": "td_esc", "tappingTermMs": 180,
+                "taps": [
+                    { "count": 1, "action": "ESCAPE" },
+                    { "count": 2, "action": { "type": "layer", "mode": "toggle", "layer": "base" } }
+                ]
+            }]
+        }`
+        roundTrips(json)
+        const { config } = decodeRemapprBlob(
+            buildRemapprBlob(parseKeymap(json), { configVersion: 1 }).blob,
+        )
+        // Synthesized ref keyed by sub_index (0 = first composite's slice).
+        expect(config!.layers[0].bindings[0]).toEqual({
+            type: 'tap_dance',
+            ref: 'td_0',
+        })
+        expect(config!.tapDances).toHaveLength(1)
+        const td = config!.tapDances![0]
+        expect(td.tappingTermMs).toBe(180)
+        expect(td.taps.map((t) => t.count)).toEqual([1, 2])
+        expect(td.taps.map((t) => t.action.type)).toEqual(['key_press', 'layer'])
+    })
+
+    it('mod_morph (SUBS table) round-trips — suppress vs keep mods', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "MM", "target": "zmk" }, ${kb(2)},
+            "layers": [{ "name": "base", "bindings": [
+                { "type": "mod_morph", "ref": "mm_dot" },
+                { "type": "mod_morph", "ref": "mm_keep" }
+            ] }],
+            "modMorphs": [
+                { "id": "mm_dot", "mods": ["LEFT_SHIFT"], "bindings": ["N", "M"] },
+                { "id": "mm_keep", "mods": ["LEFT_GUI"], "keepMods": ["LEFT_GUI"], "bindings": ["A", "B"] }
+            ]
+        }`
+        roundTrips(json)
+        const { config } = decodeRemapprBlob(
+            buildRemapprBlob(parseKeymap(json), { configVersion: 1 }).blob,
+        )
+        expect(config!.modMorphs).toHaveLength(2)
+        const [dot, keep] = config!.modMorphs!
+        // No keep-mods authored ⇒ trigger mods suppressed (MORPH_SUPPRESS_MODS);
+        // decode reports keepMods absent.
+        expect(dot.mods).toEqual(['LEFT_SHIFT'])
+        expect(dot.keepMods).toBeUndefined()
+        expect(dot.bindings.map((b) => b.type)).toEqual(['key_press', 'key_press'])
+        // keep-mods authored ⇒ flag clear ⇒ decode reports keepMods = the mods.
+        expect(keep.keepMods).toEqual(['LEFT_GUI'])
+    })
+
+    it('a composite reused across cells dedupes to one behavior + one def', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "TDx2", "target": "zmk" }, ${kb(3)},
+            "layers": [{ "name": "base", "bindings": [
+                { "type": "tap_dance", "ref": "td" },
+                { "type": "tap_dance", "ref": "td" },
+                "A"
+            ] }],
+            "tapDances": [{ "id": "td", "taps": [
+                { "count": 1, "action": "B" }, { "count": 2, "action": "C" }
+            ] }]
+        }`
+        roundTrips(json)
+        const { config } = decodeRemapprBlob(
+            buildRemapprBlob(parseKeymap(json), { configVersion: 1 }).blob,
+        )
+        // Both cells decode to the same ref; exactly one reconstructed def.
+        expect(config!.layers[0].bindings[0]).toEqual(config!.layers[0].bindings[1])
+        expect(config!.tapDances).toHaveLength(1)
+    })
 })

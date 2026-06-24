@@ -198,6 +198,15 @@ export const Flavor = {
     TapUnlessInterrupted: 3,
 } as const
 
+// remappr_behavior.flags bits (REMAPPR_BHF_*, behavior_table.h). MORPH_SUPPRESS_MODS
+// is set on a MOD_MORPH record to drop the trigger mods from the report while the
+// morphed sub-behavior is active (ZMK mod-morph without keep-mods).
+export const BehaviorFlags = {
+    RETRO_TAP: 1 << 0,
+    HOLD_WHILE_UNDECIDED: 1 << 1,
+    MORPH_SUPPRESS_MODS: 1 << 2,
+} as const
+
 // HID modifier byte bits (REMAPPR_MOD_*).
 export const MOD = {
     LEFT_CTRL: 1 << 0,

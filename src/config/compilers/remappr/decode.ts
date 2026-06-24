@@ -26,6 +26,9 @@ import type {
     CanonLayer,
     CanonMacro,
     CanonMacroStep,
+    CanonModMorph,
+    CanonTapDance,
+    CanonTapDanceStep,
     ConfigKeymap,
     Direction,
     HoldTapFlavor,
@@ -38,6 +41,7 @@ import type {
 } from '../../types'
 import {
     BehaviorType,
+    BehaviorFlags,
     BLOB_HEADER_LEN,
     BLOB_MAGIC,
     BLOB_READER_VERSION,
@@ -189,6 +193,13 @@ interface DecodeCtx {
     macroRef: (i: number) => string
     diag: DiagnosticBag
     path: (string | number)[]
+    /** The decoded SUBS pool a composite record's sub_index/sub_count slices. */
+    subs: BehaviorRecord[]
+    /** Composite definitions reconstructed while walking the BEHAVIOR table; a
+     *  TAP_DANCE / MOD_MORPH cell decodes to a `ref` into these and pushes the
+     *  reconstructed def here (keyed unique by sub_index). */
+    tapDances: CanonTapDance[]
+    modMorphs: CanonModMorph[]
 }
 
 // Build a key_press, threading the original mods through (KEY_MODS).
@@ -387,12 +398,67 @@ function behaviorToAction(rec: BehaviorRecord, ctx: DecodeCtx): CanonAction {
                 ? { type: 'peripheral', kind, code: rec.hold }
                 : unmodeled('peripheral')
         }
+        case BehaviorType.TapDance:
+            return decodeTapDance(rec, ctx)
+        case BehaviorType.ModMorph:
+            return decodeModMorph(rec, ctx)
         default:
-            // Composite refs (MOD_MORPH 9, TAP_DANCE 10) and any extended sub-
-            // codes have no standalone canonical form here. Decode as none so the
-            // keymap still forms.
+            // Any extended sub-code with no standalone canonical form decodes to
+            // none so the keymap still forms.
             return unmodeled(`type ${rec.type}`)
     }
+}
+
+// MOD_MORPH (9) / TAP_DANCE (10) → a `ref` into a reconstructed definition. The
+// firmware carries no name, so the ref is synthesized from the sub_index (unique
+// per composite — distinct composites own distinct, non-overlapping sub slices).
+function decodeTapDance(rec: BehaviorRecord, ctx: DecodeCtx): CanonAction {
+    const ref = `td_${rec.subIndex}`
+    const taps: CanonTapDanceStep[] = []
+    for (let i = 0; i < rec.subCount; i++) {
+        const sub = ctx.subs[rec.subIndex + i]
+        if (!sub) {
+            ctx.diag.error(
+                `tap_dance sub ${rec.subIndex + i} out of range`,
+                ctx.path,
+            )
+            break
+        }
+        taps.push({
+            count: i + 1,
+            action: behaviorToAction(sub, {
+                ...ctx,
+                path: [...ctx.path, 'taps', i + 1],
+            }),
+        })
+    }
+    const def: CanonTapDance = { id: ref, taps }
+    if (rec.tappingTermMs) def.tappingTermMs = rec.tappingTermMs
+    ctx.tapDances.push(def)
+    return { type: 'tap_dance', ref }
+}
+
+function decodeModMorph(rec: BehaviorRecord, ctx: DecodeCtx): CanonAction {
+    const ref = `mm_${rec.subIndex}`
+    const sub0 = ctx.subs[rec.subIndex]
+    const sub1 = ctx.subs[rec.subIndex + 1]
+    if (rec.subCount < 2 || !sub0 || !sub1) {
+        ctx.diag.error(`mod_morph "${ref}" needs two sub-behaviors`, ctx.path)
+        return { type: 'none' }
+    }
+    const mods = maskToMods(rec.hold)
+    const def: CanonModMorph = {
+        id: ref,
+        mods,
+        bindings: [
+            behaviorToAction(sub0, { ...ctx, path: [...ctx.path, 'bindings', 0] }),
+            behaviorToAction(sub1, { ...ctx, path: [...ctx.path, 'bindings', 1] }),
+        ],
+    }
+    // No SUPPRESS flag ⇒ the trigger mods passed through (ZMK keep-mods = all).
+    if (!(rec.flags & BehaviorFlags.MORPH_SUPPRESS_MODS)) def.keepMods = mods
+    ctx.modMorphs.push(def)
+    return { type: 'mod_morph', ref }
 }
 
 // LIGHTING target inversion can't use the shared `invert` helper directly
@@ -532,6 +598,16 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
     const behaviors = readRecordTable(bytes, behT)
     if (behaviors === null) return fail(DecodeCode.TABLE_FRAME)
 
+    // ── SUBS (optional) — composite sub-behaviors (mod-morph / tap-dance) ──
+    let subs: BehaviorRecord[] = []
+    const subsT = table(TableId.Subs)
+    if (subsT) {
+        if (subsT.version !== 1) return fail(DecodeCode.TABLE_VER)
+        const s = readRecordTable(bytes, subsT)
+        if (s === null) return fail(DecodeCode.TABLE_FRAME)
+        subs = s
+    }
+
     // ── BINDING (required, exact length, layer-major) ──
     const bindT = table(TableId.Binding)
     if (!bindT) return fail(DecodeCode.MISSING)
@@ -561,7 +637,19 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
         i >= 0 && i < macros.length ? macros[i].id : `macro_${i}`
 
     // ── behaviors → CanonAction per cell, sliced into layers ──
-    const ctx: DecodeCtx = { layerName, macroRef, diag, path: [] }
+    // Composite cells (mod-morph / tap-dance) reconstruct their definitions into
+    // these accumulators as a side effect of decoding each behavior record.
+    const tapDances: CanonTapDance[] = []
+    const modMorphs: CanonModMorph[] = []
+    const ctx: DecodeCtx = {
+        layerName,
+        macroRef,
+        diag,
+        path: [],
+        subs,
+        tapDances,
+        modMorphs,
+    }
     const decoded = behaviors.map((rec, i) =>
         behaviorToAction(rec, { ...ctx, path: ['behaviors', i] }),
     )
@@ -601,7 +689,9 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
         keyboard: { id: 'decoded', name: 'Decoded', keys },
         layers,
         ...(combos.length ? { combos } : {}),
+        ...(tapDances.length ? { tapDances } : {}),
         ...(macros.length ? { macros } : {}),
+        ...(modMorphs.length ? { modMorphs } : {}),
         ...(conditionalLayers.length ? { conditionalLayers } : {}),
     }
 

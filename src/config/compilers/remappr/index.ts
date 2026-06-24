@@ -24,6 +24,7 @@ import {
 import type { CanonAction, ConfigKeymap } from '../../types'
 import {
     BehaviorType,
+    BehaviorFlags,
     BlobBuilder,
     BLOB_READER_VERSION,
     Flavor,
@@ -44,7 +45,13 @@ import {
     type MacroRecord,
     type MacroStep,
 } from './blobWriter'
-import type { CanonMacro, CanonMacroStep, CanonTapHold } from '../../types'
+import type {
+    CanonMacro,
+    CanonMacroStep,
+    CanonModMorph,
+    CanonTapDance,
+    CanonTapHold,
+} from '../../types'
 import { MODIFIERS, type Modifier } from '../../keycodes'
 
 const COMBO_ANY_LAYER = 0xff
@@ -237,6 +244,46 @@ function flavorCode(a: CanonTapHold): number {
     return Flavor.Balanced
 }
 
+/* ── composite behaviors (mod-morph 9, tap-dance 10; §43.3) ──────────────────
+ * MOD_MORPH and TAP_DANCE carry their inner behaviors in the separate SUBS table
+ * (id 12, same 16-byte record framing as BEHAVIOR); the composite record points
+ * at a contiguous slice via sub_index/sub_count. The encoder lowers each
+ * definition's inner CanonActions into that pool the first time a `ref` is seen,
+ * memoizing the produced record so repeated references share one sub-slice (and
+ * dedupe down to a single behavior-table entry). */
+interface CompCtx {
+    subs: BehaviorRecord[]
+    tapDanceById: Map<string, CanonTapDance>
+    modMorphById: Map<string, CanonModMorph>
+    /** ref-key ("td:id" / "mm:id") → already-lowered composite record. */
+    memo: Map<string, BehaviorRecord>
+    /** ref-keys currently being lowered, to break a self-referential cycle. */
+    inProgress: Set<string>
+}
+
+// Memoize a composite record by ref-key and guard against a definition that
+// references itself (which would recurse forever). `build` returns null for an
+// unknown/invalid ref; the NONE fallback keeps the blob well-formed.
+function withComposite(
+    key: string,
+    comp: CompCtx,
+    diag: DiagnosticBag,
+    path: (string | number)[],
+    build: () => BehaviorRecord | null,
+): BehaviorRecord {
+    const memoed = comp.memo.get(key)
+    if (memoed) return memoed
+    if (comp.inProgress.has(key)) {
+        diag.error(`composite "${key}" references itself`, path)
+        return rec({ type: BehaviorType.None })
+    }
+    comp.inProgress.add(key)
+    const built = build() ?? rec({ type: BehaviorType.None })
+    comp.inProgress.delete(key)
+    comp.memo.set(key, built)
+    return built
+}
+
 // Lower one canonical binding to a behavior record. Unsupported actions emit a
 // diagnostic and fall back to NONE so the blob still forms (thin slice).
 function lowerAction(
@@ -245,6 +292,7 @@ function lowerAction(
     path: (string | number)[],
     macroIndex: Map<string, number>,
     layerIndex: Map<string, number>,
+    comp: CompCtx,
 ): BehaviorRecord {
     switch (action.type) {
         case 'key_press': {
@@ -507,6 +555,100 @@ function lowerAction(
                 tap: PeripheralKind[action.kind],
                 hold: action.code,
             })
+        case 'tap_dance':
+            return withComposite(`td:${action.ref}`, comp, diag, path, () => {
+                const def = comp.tapDanceById.get(action.ref)
+                if (!def) {
+                    diag.error(`unknown tap_dance "${action.ref}"`, path)
+                    return null
+                }
+                if (def.hold)
+                    diag.warn(
+                        `tap_dance "${action.ref}" hold target is not on the ` +
+                            `wire (firmware TAP_DANCE is tap-count only) — dropped`,
+                        path,
+                    )
+                // sub[i] fires on (i+1) taps; counts past sub_count clamp to the
+                // last. Index by count so sparse authoring stays aligned.
+                const maxCount = Math.max(...def.taps.map((t) => t.count))
+                const slots: BehaviorRecord[] = Array.from(
+                    { length: maxCount },
+                    () => rec({ type: BehaviorType.None }),
+                )
+                const filled = new Array<boolean>(maxCount).fill(false)
+                for (const tap of def.taps) {
+                    slots[tap.count - 1] = lowerAction(
+                        tap.action,
+                        diag,
+                        [...path, 'taps', tap.count],
+                        macroIndex,
+                        layerIndex,
+                        comp,
+                    )
+                    filled[tap.count - 1] = true
+                }
+                for (let i = 0; i < maxCount; i++)
+                    if (!filled[i])
+                        diag.warn(
+                            `tap_dance "${action.ref}" has no action for ` +
+                                `${i + 1} tap(s) — emits none`,
+                            path,
+                        )
+                const subIndex = comp.subs.length
+                comp.subs.push(...slots)
+                return rec({
+                    type: BehaviorType.TapDance,
+                    subCount: maxCount,
+                    subIndex,
+                    tappingTermMs: def.tappingTermMs ?? 0,
+                })
+            })
+        case 'mod_morph':
+            return withComposite(`mm:${action.ref}`, comp, diag, path, () => {
+                const def = comp.modMorphById.get(action.ref)
+                if (!def) {
+                    diag.error(`unknown mod_morph "${action.ref}"`, path)
+                    return null
+                }
+                // sub[0] = unmorphed binding, sub[1] = morphed binding.
+                const sub0 = lowerAction(
+                    def.bindings[0],
+                    diag,
+                    [...path, 'bindings', 0],
+                    macroIndex,
+                    layerIndex,
+                    comp,
+                )
+                const sub1 = lowerAction(
+                    def.bindings[1],
+                    diag,
+                    [...path, 'bindings', 1],
+                    macroIndex,
+                    layerIndex,
+                    comp,
+                )
+                const subIndex = comp.subs.length
+                comp.subs.push(sub0, sub1)
+                // ZMK keep-mods: trigger mods are suppressed from the morphed
+                // report unless kept. The firmware flag is all-or-nothing, so any
+                // keep-mods list keeps them all; a partial list warns.
+                const keep = def.keepMods ?? []
+                const suppress = keep.length === 0
+                if (keep.length && !def.mods.every((m) => keep.includes(m)))
+                    diag.warn(
+                        `mod_morph "${action.ref}" keepMods is a partial subset` +
+                            ` — per-mod suppression isn't on the wire; keeping ` +
+                            `all trigger mods`,
+                        path,
+                    )
+                return rec({
+                    type: BehaviorType.ModMorph,
+                    hold: modsToMask(def.mods),
+                    subCount: 2,
+                    subIndex,
+                    flags: suppress ? BehaviorFlags.MORPH_SUPPRESS_MODS : 0,
+                })
+            })
         default:
             diag.error(
                 `action "${action.type}" not yet supported by the remappr ` +
@@ -538,6 +680,17 @@ function encodeBlob(
         diag,
     )
     const layerIndex = new Map(config.layers.map((l, i) => [l.name, i]))
+
+    // Composite (mod-morph / tap-dance) lowering context: definition lookups +
+    // the shared SUBS pool the composite records point into.
+    const subs: BehaviorRecord[] = []
+    const comp: CompCtx = {
+        subs,
+        tapDanceById: new Map((config.tapDances ?? []).map((t) => [t.id, t])),
+        modMorphById: new Map((config.modMorphs ?? []).map((m) => [m.id, m])),
+        memo: new Map(),
+        inProgress: new Set(),
+    }
 
     // De-duplicated behavior table; bindings index into it.
     const behaviors: BehaviorRecord[] = []
@@ -572,6 +725,7 @@ function encodeBlob(
                       ['layers', li, 'bindings', pos],
                       macroIndex,
                       layerIndex,
+                      comp,
                   )
                 : rec({ type: BehaviorType.None })
             cells.push(getOrAdd(r))
@@ -593,6 +747,7 @@ function encodeBlob(
                 ['combos', ci, 'action'],
                 macroIndex,
                 layerIndex,
+                comp,
             ),
         ),
     }))
@@ -620,6 +775,9 @@ function encodeBlob(
         .layerTable(numLayers, numPositions, defaultTermMs, releaseMs)
         .behaviorTable(behaviors)
         .bindingTable(cells)
+    // SUBS table (composite sub-behaviors) only when a mod-morph / tap-dance was
+    // lowered; absent otherwise so existing composite-free goldens are unchanged.
+    if (subs.length > 0) builder.subsTable(subs)
     if (macroRecords.length > 0) builder.macroTable(macroRecords)
     if (combos.length > 0) builder.comboTable(combos)
     if (conditionals.length > 0) builder.conditionalTable(conditionals)
