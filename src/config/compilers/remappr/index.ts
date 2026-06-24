@@ -42,6 +42,8 @@ import {
     type BehaviorRecord,
     type ComboRecord,
     type ConditionalRecord,
+    type KeyOverrideRecord,
+    type LeaderRecord,
     type MacroRecord,
     type MacroStep,
 } from './blobWriter'
@@ -768,6 +770,61 @@ function encodeBlob(
         thenLayer: resolveLayer(cl.thenLayer, ci),
     }))
 
+    // Key overrides (§43.5; QMK key_overrides) — self-contained 8-byte records;
+    // the layer set folds to a bitmask (0 = any layer).
+    const keyOverrides: KeyOverrideRecord[] = (config.keyOverrides ?? []).map(
+        (ko, i) => {
+            const p = ['keyOverrides', i]
+            const layersMask = (ko.layers ?? []).reduce((mask, ln) => {
+                const li = layerIndex.get(ln)
+                if (li === undefined) {
+                    diag.error(`unknown layer "${ln}"`, [...p, 'layers'])
+                    return mask
+                }
+                return mask | (1 << li)
+            }, 0)
+            return {
+                trigger: keyUsage(ko.trigger, diag, [...p, 'trigger']) ?? 0,
+                triggerMods: modsToMask(ko.triggerMods),
+                negativeMods: modsToMask(ko.negativeMods ?? []),
+                suppressedMods: modsToMask(ko.suppressedMods ?? []),
+                replacement: ko.replacement
+                    ? (keyUsage(ko.replacement, diag, [...p, 'replacement']) ?? 0)
+                    : 0,
+                replacementMods: modsToMask(ko.replacementMods ?? []),
+                layers: layersMask,
+            }
+        },
+    )
+
+    // Leader sequences (§43.5) — `output` references the (deduped) BEHAVIOR table.
+    const leaders: LeaderRecord[] = (config.leaderSequences ?? []).map(
+        (ls, i) => {
+            const p = ['leaderSequences', i]
+            const usages = ls.sequence.map(
+                (k, ki) => keyUsage(k, diag, [...p, 'sequence', ki]) ?? 0,
+            )
+            if (usages.length > 5)
+                diag.error(
+                    `leader sequence ${i} has ${usages.length} keys (max 5)`,
+                    p,
+                )
+            return {
+                usages: usages.slice(0, 5),
+                outputIndex: getOrAdd(
+                    lowerAction(
+                        ls.action,
+                        diag,
+                        [...p, 'action'],
+                        macroIndex,
+                        layerIndex,
+                        comp,
+                    ),
+                ),
+            }
+        },
+    )
+
     const defaultTermMs = config.defaults?.tappingTermMs ?? 200
     const releaseMs = 0
 
@@ -781,6 +838,8 @@ function encodeBlob(
     if (macroRecords.length > 0) builder.macroTable(macroRecords)
     if (combos.length > 0) builder.comboTable(combos)
     if (conditionals.length > 0) builder.conditionalTable(conditionals)
+    if (keyOverrides.length > 0) builder.keyOverrideTable(keyOverrides)
+    if (leaders.length > 0) builder.leaderTable(leaders)
 
     return builder.finalize(
         config.schemaVersion,

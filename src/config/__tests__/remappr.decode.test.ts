@@ -299,4 +299,62 @@ describe('remappr round-trip (encode → decode → re-encode is byte-stable)', 
         expect(config!.layers[0].bindings[0]).toEqual(config!.layers[0].bindings[1])
         expect(config!.tapDances).toHaveLength(1)
     })
+
+    // pattern-check: skip — key-override / leader table round-trip fixtures
+    it('key_override (TBL_KEY_OVERRIDE) round-trips', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "KO", "target": "zmk" }, ${kb(2)},
+            "layers": [
+                { "name": "base", "bindings": ["A", "B"] },
+                { "name": "fn", "bindings": ["X", "Y"] }
+            ],
+            "keyOverrides": [
+                { "trigger": "A", "triggerMods": ["LEFT_CTRL"], "replacement": "B",
+                  "replacementMods": ["LEFT_SHIFT"], "suppressedMods": ["LEFT_CTRL"], "layers": ["fn"] },
+                { "trigger": "C", "triggerMods": [], "negativeMods": ["LEFT_ALT"] }
+            ]
+        }`
+        roundTrips(json)
+        const { config } = decodeRemapprBlob(
+            buildRemapprBlob(parseKeymap(json), { configVersion: 1 }).blob,
+        )
+        expect(config!.keyOverrides).toHaveLength(2)
+        const [a, c] = config!.keyOverrides!
+        expect(a.triggerMods).toEqual(['LEFT_CTRL'])
+        expect(a.suppressedMods).toEqual(['LEFT_CTRL'])
+        expect(a.replacementMods).toEqual(['LEFT_SHIFT'])
+        expect(a.layers).toEqual(['Layer 1']) // fn = layer index 1 (synthetic name)
+        // Empty trigger mask + no replacement decode to absent optional fields.
+        expect(c.triggerMods).toEqual([])
+        expect(c.negativeMods).toEqual(['LEFT_ALT'])
+        expect(c.replacement).toBeUndefined()
+        expect(c.layers).toBeUndefined()
+    })
+
+    it('leader sequence (TBL_LEADER) round-trips — output refs the behavior table', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "LDR", "target": "zmk" }, ${kb(2)},
+            "layers": [{ "name": "base", "bindings": [{ "type": "leader", "windowMs": 400 }, "A"] }],
+            "leaderSequences": [
+                { "sequence": ["B", "C"], "action": "ESCAPE" },
+                { "sequence": ["X"], "action": { "type": "layer", "mode": "toggle", "layer": "base" } }
+            ]
+        }`
+        roundTrips(json)
+        const { config } = decodeRemapprBlob(
+            buildRemapprBlob(parseKeymap(json), { configVersion: 1 }).blob,
+        )
+        expect(config!.leaderSequences).toHaveLength(2)
+        expect(config!.leaderSequences![0].sequence).toHaveLength(2)
+        expect(config!.leaderSequences![0].action.type).toBe('key_press')
+        expect(config!.leaderSequences![1].sequence).toHaveLength(1)
+        expect(config!.leaderSequences![1].action.type).toBe('layer')
+        // The per-key leader-start cell still decodes alongside the table.
+        expect(config!.layers[0].bindings[0]).toEqual({
+            type: 'leader',
+            windowMs: 400,
+        })
+    })
 })

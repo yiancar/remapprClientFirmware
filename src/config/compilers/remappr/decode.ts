@@ -23,7 +23,9 @@ import type {
     CanonConditionalLayer,
     CanonGeometry,
     CanonKeyPress,
+    CanonKeyOverride,
     CanonLayer,
+    CanonLeaderSequence,
     CanonMacro,
     CanonMacroStep,
     CanonModMorph,
@@ -672,6 +674,16 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
     const condT = table(TableId.Conditional)
     const conditionalLayers = condT ? readConditionals(bytes, condT, layerName) : []
 
+    // ── KEY_OVERRIDE (optional) ──
+    const koT = table(TableId.KeyOverride)
+    const keyOverrides = koT ? readKeyOverrides(bytes, koT, layerName, diag) : []
+
+    // ── LEADER (optional) — output references the BEHAVIOR table (like combos) ──
+    const leaderT = table(TableId.Leader)
+    const leaderSequences = leaderT
+        ? readLeaders(bytes, leaderT, decoded, diag)
+        : []
+
     // ── synthesize keyboard geometry (real layout comes from GET_KEY_LAYOUT) ──
     const keys: CanonGeometry[] = Array.from({ length: numPositions }, (_, i) => ({
         x: i,
@@ -693,6 +705,8 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
         ...(macros.length ? { macros } : {}),
         ...(modMorphs.length ? { modMorphs } : {}),
         ...(conditionalLayers.length ? { conditionalLayers } : {}),
+        ...(keyOverrides.length ? { keyOverrides } : {}),
+        ...(leaderSequences.length ? { leaderSequences } : {}),
     }
 
     return { code: DecodeCode.OK, config, configVersion, diagnostics: diag.all }
@@ -807,6 +821,96 @@ function readConditionals(
         const ifLayers: string[] = []
         for (let j = 0; j < numIf; j++) ifLayers.push(layerName(r.u8()))
         out.push({ ifLayers, thenLayer: layerName(thenLayer) })
+    }
+    return out
+}
+
+// TBL_KEY_OVERRIDE: u16 count + count × 8-byte { u8 trigger, u8 trigger_mods,
+// u8 negative_mods, u8 suppressed_mods, u8 replacement, u8 replacement_mods,
+// u16 layers }. Optional masks/keys decode only when non-zero so re-encode (which
+// emits 0 for an absent field) stays byte-stable.
+function readKeyOverrides(
+    bytes: Uint8Array,
+    t: TableFrame,
+    layerName: (i: number) => string,
+    diag: DiagnosticBag,
+): CanonKeyOverride[] {
+    const r = new ByteReader(bytes)
+    r.seek(t.start)
+    const count = r.u16()
+    const out: CanonKeyOverride[] = []
+    for (let i = 0; i < count; i++) {
+        const trigger = r.u8()
+        const triggerMods = r.u8()
+        const negativeMods = r.u8()
+        const suppressedMods = r.u8()
+        const replacement = r.u8()
+        const replacementMods = r.u8()
+        const layersMask = r.u16()
+        const triggerKey = usageToKey(trigger)
+        if (triggerKey === null) {
+            diag.warn(
+                `key override ${i} trigger usage 0x${trigger.toString(16)} not in catalog`,
+            )
+            continue
+        }
+        const ko: CanonKeyOverride = {
+            trigger: triggerKey,
+            triggerMods: maskToMods(triggerMods),
+        }
+        if (negativeMods) ko.negativeMods = maskToMods(negativeMods)
+        if (suppressedMods) ko.suppressedMods = maskToMods(suppressedMods)
+        if (replacement) {
+            const rk = usageToKey(replacement)
+            if (rk) ko.replacement = rk
+            else
+                diag.warn(
+                    `key override ${i} replacement usage 0x${replacement.toString(16)} not in catalog`,
+                )
+        }
+        if (replacementMods) ko.replacementMods = maskToMods(replacementMods)
+        if (layersMask) {
+            const names: string[] = []
+            for (let b = 0; b < 16; b++)
+                if (layersMask & (1 << b)) names.push(layerName(b))
+            ko.layers = names
+        }
+        out.push(ko)
+    }
+    return out
+}
+
+// TBL_LEADER: u16 count + per sequence { u8 num_usages, u8 pad, u16 output_idx,
+// num_usages × u8 usage }. output_idx references the BEHAVIOR table (like combos).
+function readLeaders(
+    bytes: Uint8Array,
+    t: TableFrame,
+    decoded: CanonAction[],
+    diag: DiagnosticBag,
+): CanonLeaderSequence[] {
+    const r = new ByteReader(bytes)
+    r.seek(t.start)
+    const count = r.u16()
+    const out: CanonLeaderSequence[] = []
+    for (let i = 0; i < count; i++) {
+        const numUsages = r.u8()
+        r.u8() // pad
+        const outIdx = r.u16()
+        const sequence: CanonicalKeyId[] = []
+        for (let k = 0; k < numUsages; k++) {
+            const key = usageToKey(r.u8())
+            if (key) sequence.push(key)
+            else diag.warn(`leader sequence ${i} usage not in catalog`)
+        }
+        const action =
+            outIdx < decoded.length
+                ? decoded[outIdx]
+                : ({ type: 'none' } as CanonAction)
+        if (outIdx >= decoded.length)
+            diag.error(
+                `leader sequence ${i} output references behavior ${outIdx}`,
+            )
+        out.push({ sequence, action })
     }
     return out
 }

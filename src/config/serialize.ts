@@ -470,6 +470,37 @@ export function toSurfaceObject(km: ConfigKeymap): Record<string, unknown> {
                   })),
               }
             : {}),
+        // pattern-check: skip — key-override / leader passthrough, mirror of the
+        // combos/conditional blocks above; canonical keys → surface tokens.
+        ...(km.keyOverrides
+            ? {
+                  keyOverrides: km.keyOverrides.map((ko) => ({
+                      trigger: keyToken(ko.trigger),
+                      triggerMods: [...ko.triggerMods],
+                      ...(ko.negativeMods?.length
+                          ? { negativeMods: [...ko.negativeMods] }
+                          : {}),
+                      ...(ko.suppressedMods?.length
+                          ? { suppressedMods: [...ko.suppressedMods] }
+                          : {}),
+                      ...(ko.replacement
+                          ? { replacement: keyToken(ko.replacement) }
+                          : {}),
+                      ...(ko.replacementMods?.length
+                          ? { replacementMods: [...ko.replacementMods] }
+                          : {}),
+                      ...(ko.layers ? { layers: [...ko.layers] } : {}),
+                  })),
+              }
+            : {}),
+        ...(km.leaderSequences
+            ? {
+                  leaderSequences: km.leaderSequences.map((ls) => ({
+                      sequence: ls.sequence.map((k) => keyToken(k)),
+                      action: denormalizeAction(ls.action),
+                  })),
+              }
+            : {}),
     }
 }
 

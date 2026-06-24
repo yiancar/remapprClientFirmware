@@ -583,6 +583,37 @@ export function normalizeKeymap(km: SurfaceKeymap): ConfigKeymap {
                   })),
               }
             : {}),
+        // pattern-check: skip — key-override / leader passthrough, mirror of the
+        // combos/conditional blocks above; surface keycodes → canonical.
+        ...(km.keyOverrides
+            ? {
+                  keyOverrides: km.keyOverrides.map((ko) => ({
+                      trigger: toCanonical(ko.trigger),
+                      triggerMods: [...ko.triggerMods],
+                      ...(ko.negativeMods?.length
+                          ? { negativeMods: [...ko.negativeMods] }
+                          : {}),
+                      ...(ko.suppressedMods?.length
+                          ? { suppressedMods: [...ko.suppressedMods] }
+                          : {}),
+                      ...(ko.replacement
+                          ? { replacement: toCanonical(ko.replacement) }
+                          : {}),
+                      ...(ko.replacementMods?.length
+                          ? { replacementMods: [...ko.replacementMods] }
+                          : {}),
+                      ...(ko.layers ? { layers: [...ko.layers] } : {}),
+                  })),
+              }
+            : {}),
+        ...(km.leaderSequences
+            ? {
+                  leaderSequences: km.leaderSequences.map((ls) => ({
+                      sequence: ls.sequence.map((k) => toCanonical(k)),
+                      action: normalizeAction(ls.action),
+                  })),
+              }
+            : {}),
     }
 }
 

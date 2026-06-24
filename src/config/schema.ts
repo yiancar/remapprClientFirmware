@@ -526,6 +526,33 @@ export const ConditionalLayerSchema = z
         'Activate thenLayer while every layer in ifLayers is simultaneously active.',
     )
 
+// pattern-check: skip — declarative zod schemas for the key-override / leader
+// authoring DTOs; validation data, no behavior or abstraction.
+export const KeyOverrideSchema = z
+    .object({
+        trigger: KeycodeSchema,
+        triggerMods: z.array(ModifierSchema),
+        negativeMods: z.array(ModifierSchema).optional(),
+        suppressedMods: z.array(ModifierSchema).optional(),
+        replacement: KeycodeSchema.optional(),
+        replacementMods: z.array(ModifierSchema).optional(),
+        layers: z.array(z.string()).optional(),
+    })
+    .describe(
+        'Key override (QMK key_overrides): emit replacement+mods instead of ' +
+            'trigger+mods while an enabled layer is active.',
+    )
+
+export const LeaderSequenceSchema = z
+    .object({
+        sequence: z.array(KeycodeSchema).min(1).max(5),
+        action: ActionSchema,
+    })
+    .describe(
+        'Leader sequence: the exact 1..5 key sequence that fires `action` ' +
+            'after the leader key opens capture.',
+    )
+
 /* ── board hardware (kscan wiring + electrical transform) ──────────────── */
 
 /** A raw devicetree GPIO phandle+specifier, kept verbatim. */
@@ -786,6 +813,8 @@ const BaseKeymapSchema = z.object({
     modMorphs: z.array(ModMorphSchema).optional(),
     holdTaps: z.array(HoldTapDefSchema).optional(),
     conditionalLayers: z.array(ConditionalLayerSchema).optional(),
+    keyOverrides: z.array(KeyOverrideSchema).optional(),
+    leaderSequences: z.array(LeaderSequenceSchema).optional(),
 })
 
 /* ── cross-reference + structural checks ───────────────────────────────── */
@@ -1044,6 +1073,14 @@ export const KeymapSchema = BaseKeymapSchema.superRefine((km, ctx) => {
         )
         layerRef(cl.thenLayer, ['conditionalLayers', ci, 'thenLayer'])
     })
+    ;(km.keyOverrides ?? []).forEach((ko, ki) => {
+        ;(ko.layers ?? []).forEach((ln, li) =>
+            layerRef(ln, ['keyOverrides', ki, 'layers', li]),
+        )
+    })
+    ;(km.leaderSequences ?? []).forEach((ls, li) =>
+        checkAction(ls.action, ['leaderSequences', li, 'action']),
+    )
 })
 
 /* ── types + helpers ───────────────────────────────────────────────────── */

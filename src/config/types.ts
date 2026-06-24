@@ -595,6 +595,30 @@ export interface CanonConditionalLayer {
     thenLayer: string
 }
 
+// pattern-check: skip — pure authoring DTOs mirroring the firmware key_override /
+// leader_seq wire structs; data shapes with no behavior or abstraction.
+/** A key override (§43.5; QMK key_overrides): while `trigger` is held with every
+ *  modifier in `triggerMods` and none in `negativeMods`, and an enabled layer is
+ *  active, the keyboard emits `replacement` + `replacementMods` instead of the
+ *  trigger, masking `suppressedMods` from the report. `replacement` absent = emit
+ *  nothing (pure mod-suppression / mod-swap). `layers` absent/empty = any layer. */
+export interface CanonKeyOverride {
+    trigger: CanonicalKeyId
+    triggerMods: Modifier[]
+    negativeMods?: Modifier[]
+    suppressedMods?: Modifier[]
+    replacement?: CanonicalKeyId
+    replacementMods?: Modifier[]
+    layers?: string[]
+}
+
+/** A leader sequence (§43.5; QMK/ZMK leader key): after a `leader` key opens
+ *  capture, this exact `sequence` of key usages fires `action`. 1..5 keys. */
+export interface CanonLeaderSequence {
+    sequence: CanonicalKeyId[]
+    action: CanonAction
+}
+
 export interface ConfigKeymap {
     schemaVersion: 1
     kind: 'remappr.keymap'
@@ -608,4 +632,6 @@ export interface ConfigKeymap {
     modMorphs?: CanonModMorph[]
     holdTaps?: CanonHoldTapDef[]
     conditionalLayers?: CanonConditionalLayer[]
+    keyOverrides?: CanonKeyOverride[]
+    leaderSequences?: CanonLeaderSequence[]
 }
