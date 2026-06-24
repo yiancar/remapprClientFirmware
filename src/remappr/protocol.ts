@@ -1,0 +1,468 @@
+// Pattern check: no GoF pattern (-) — rejected — pure wire constants + stateless
+// frame encode/parse functions (DataView reads); mirrors the existing
+// zmk/keychron protocol.ts data-codec style, no GoF abstraction warranted.
+//
+// The Remappr control wire format — both the legacy flat protocol and the
+// proto-v2 universal (UCH / 0xE2) layer. Ground truth: firmware
+// include/remappr/{control,control_auth,control_frag}.h +
+// docs/universal-request-response-protocol.md. Little-endian throughout. This
+// module is pure (no I/O); rpc.ts drives the transport, auth.ts the crypto.
+
+/* ── transport demux tags (byte 0) ──────────────────────────────────────── */
+
+export const EVENT_TAG = 0xe0 // legacy event frame
+export const SEALED_TAG = 0xe1 // sealed reply / envelope
+export const UNIVERSAL_TAG = 0xe2 // universal (UCH-wrapped) frame
+// 0x01–0x7F = a plaintext response (byte 0 echoes the request cmd)
+
+/** Fixed report size on both USB and BLE. */
+export const FRAME = 64
+/** USB seal padding: inner plaintext is zero-filled to this before encrypt so
+ *  the sealed frame fills the 64-byte report (1 tag + 4 ctr + 43 + 16 tag). */
+export const SEAL_PLAIN = 43
+/** Sealed-envelope overhead beyond the plaintext: ctr(4) + tag(16). */
+export const SEAL_OVERHEAD = 20
+
+/** Legacy sealed (0xE1) config-chunk size — the firmware's legacy data-plane
+ *  figure (the universal-sealed GET_LIMITS value of 16 is a different path).
+ *  Config writes ride the legacy sealed path, so they use this. */
+export const LEGACY_SEALED_CHUNK = 32
+/** Blob flash alignment (STM32U5 quadword): pad the blob to a multiple of 16. */
+export const BLOB_ALIGN = 16
+
+/* ── legacy control verbs (enum remappr_control_cmd) ────────────────────── */
+
+export const Cmd = {
+    GET_DEVICE_INFO: 0x01,
+    GET_SCHEMA_VERSION: 0x02,
+    GET_CAPABILITIES: 0x03,
+    WRITE_CONFIG_BEGIN: 0x10,
+    WRITE_CONFIG_CHUNK: 0x11,
+    VALIDATE_CONFIG: 0x12,
+    COMMIT_CONFIG: 0x13,
+    ROLLBACK_CONFIG: 0x14,
+    READ_CONFIG_CHUNK: 0x15,
+    GET_PROFILE_STATUS: 0x20,
+    SELECT_PROFILE: 0x21,
+    CLEAR_PROFILE: 0x22,
+    SET_RGB: 0x30,
+    SET_BASE_LAYER: 0x40,
+    GET_LAYER_STATE: 0x41,
+    GET_DIAGNOSTICS: 0x50,
+    CONTROL_AUTH_BEGIN: 0x60,
+    CONTROL_AUTH_FINISH: 0x61,
+} as const
+
+/** Verbs reachable without a sealed envelope (cmd_open_plaintext, control.c). */
+export const PLAINTEXT_CMDS: ReadonlySet<number> = new Set([
+    Cmd.GET_DEVICE_INFO,
+    Cmd.GET_SCHEMA_VERSION,
+    Cmd.GET_CAPABILITIES,
+    Cmd.READ_CONFIG_CHUNK,
+    Cmd.GET_PROFILE_STATUS,
+    Cmd.GET_LAYER_STATE,
+    Cmd.GET_DIAGNOSTICS,
+    Cmd.CONTROL_AUTH_BEGIN,
+    Cmd.CONTROL_AUTH_FINISH,
+])
+
+/** enum remappr_control_status. */
+export const Status = {
+    OK: 0,
+    ERR_CMD: 1,
+    ERR_ARG: 2,
+    ERR_STATE: 3,
+    ERR_STORAGE: 4,
+    ERR_INVALID: 5,
+    ERR_VERSION: 6,
+    ERR_ACTIVATE: 7,
+    ERR_AUTH: 8,
+} as const
+
+const STATUS_NAME: Record<number, string> = {
+    0: 'OK',
+    1: 'ERR_CMD',
+    2: 'ERR_ARG',
+    3: 'ERR_STATE',
+    4: 'ERR_STORAGE',
+    5: 'ERR_INVALID',
+    6: 'ERR_VERSION',
+    7: 'ERR_ACTIVATE',
+    8: 'ERR_AUTH',
+}
+
+export function statusName(status: number): string {
+    return STATUS_NAME[status] ?? `0x${status.toString(16)}`
+}
+
+/** enum remappr_control_cap (u32 bitmask). */
+export const Cap = {
+    CONFIG: 1 << 0,
+    PROFILES: 1 << 1,
+    RGB: 1 << 2,
+    LAYERS: 1 << 3,
+    DIAGNOSTICS: 1 << 4,
+    AUTH: 1 << 5,
+    KEYMAP: 1 << 6,
+} as const
+
+/* ── universal (proto-v2) ───────────────────────────────────────────────── */
+
+export const UCH_VERSION = 2
+export const UCH_LEN = 8
+/** request_id sentinel: fire-and-forget, device suppresses the reply. */
+export const UCH_REQ_FIRE_AND_FORGET = 0xff
+
+export const Namespace = {
+    COMMON: 0x00,
+    KEYBOARD: 0x01,
+    MOUSE: 0x02,
+    JOYSTICK: 0x03,
+    AUDIO: 0x04,
+    LIGHTING: 0x05,
+    PROFILES: 0x06,
+    DONGLE: 0x07,
+    RADIO: 0x08,
+} as const
+
+export const UchFlag = {
+    RESP: 1 << 0,
+    EVENT: 1 << 1,
+    FRAG_MORE: 1 << 2,
+    FRAG_FIRST: 1 << 3,
+} as const
+
+/** COMMON-namespace verbs that only answer inside a 0xE2 frame (ERR_CMD on the
+ *  legacy path). The legacy verbs keep their numbers under COMMON. */
+export const CommonVerb = {
+    GET_PERSONALITY_MAP: 0x04,
+    GET_MANIFEST: 0x05,
+    GET_LIMITS: 0x06,
+    SUBSCRIBE_EVENTS: 0x07,
+    UNSUBSCRIBE: 0x08,
+    QUERY_STAGE_OFFSET: 0x16,
+    GET_CONFIG_METADATA: 0x17,
+} as const
+
+/** KEYBOARD-namespace verbs (proto-v2, chunked). */
+export const KeyboardVerb = {
+    GET_KEYMAP_BOUNDS: 0x42,
+    GET_KEY_LAYOUT: 0x43,
+} as const
+
+/** DONGLE-namespace verbs (relay path; mostly deferred). */
+export const DongleVerb = {
+    LIST_NODES: 0x01,
+    GET_NODE_INFO: 0x02,
+} as const
+
+/* ── frag reassembly limits (control_frag / control_cli) ────────────────── */
+
+export const FRAG_REASSEMBLY_CAP = 4096
+export const FRAG_INTER_TIMEOUT_MS = 2000
+
+/* ── transport identifiers ──────────────────────────────────────────────── */
+
+export const USB_VID = 0x1209
+export const USB_PID = 0x0001
+export const USB_USAGE_PAGE = 0xff00
+export const USB_USAGE = 0x01
+
+export const BLE_SERVICE_UUID = '52454d50-5200-4354-4c00-000000000001'
+export const BLE_CONTROL_CHAR_UUID = '52454d50-5200-4354-4c00-000000000002'
+export const BLE_EVENT_CHAR_UUID = '52454d50-5200-4354-4c00-000000000003'
+
+/* ── legacy frame codec ─────────────────────────────────────────────────── */
+
+/** A parsed legacy response (after the 6-byte header). */
+export interface ControlResponse {
+    cmd: number
+    seq: number
+    status: number
+    data: Uint8Array
+}
+
+/** Build a legacy request frame `[cmd][seq][arg_len u16][arg]` (no padding). */
+export function buildRequest(cmd: number, seq: number, arg: Uint8Array): Uint8Array {
+    const out = new Uint8Array(4 + arg.length)
+    const dv = new DataView(out.buffer)
+    out[0] = cmd
+    out[1] = seq
+    dv.setUint16(2, arg.length, true)
+    out.set(arg, 4)
+    return out
+}
+
+/** Parse a legacy response frame (the 64-byte report or the inner sealed bytes). */
+export function parseResponse(frame: Uint8Array): ControlResponse {
+    const dv = new DataView(frame.buffer, frame.byteOffset, frame.byteLength)
+    const dataLen = dv.getUint16(4, true)
+    return {
+        cmd: frame[0],
+        seq: frame[1],
+        status: frame[2],
+        data: frame.subarray(6, 6 + dataLen),
+    }
+}
+
+/** A parsed legacy event frame (0xE0). */
+export interface ControlEvent {
+    eventId: number
+    payload: Uint8Array
+}
+
+export const EVT_INPUT = 0x01
+
+export function parseEvent(frame: Uint8Array): ControlEvent {
+    const dv = new DataView(frame.buffer, frame.byteOffset, frame.byteLength)
+    const len = dv.getUint16(2, true)
+    return { eventId: frame[1], payload: frame.subarray(4, 4 + len) }
+}
+
+/** A decoded 6-byte INPUT_EVENT record (live key/encoder/pointer telemetry). */
+export interface InputEvent {
+    kind: number // 0 key, 1 encoder, 2 pointer
+    pressed: boolean
+    seq: number
+    src: number
+    inputId: number
+    ts: number
+}
+
+export function parseInputEvent(p: Uint8Array): InputEvent {
+    const dv = new DataView(p.buffer, p.byteOffset, p.byteLength)
+    return {
+        kind: (p[0] >> 4) & 0x0f,
+        pressed: (p[0] & 0x08) !== 0,
+        seq: p[0] & 0x07,
+        src: p[1],
+        inputId: dv.getUint16(2, true),
+        ts: dv.getUint16(4, true),
+    }
+}
+
+/** 16-byte DEVICE_INFO (hand-serialized, unaligned: hw_rev@9, config_version@12). */
+export interface DeviceInfo {
+    protoMin: number
+    protoMax: number
+    schemaVersion: number
+    fwMajor: number
+    fwMinor: number
+    fwPatch: number
+    hwRev: number
+    hasActive: boolean
+    configVersion: number
+}
+
+export function parseDeviceInfo(d: Uint8Array): DeviceInfo {
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
+    return {
+        protoMin: dv.getUint16(0, true),
+        protoMax: dv.getUint16(2, true),
+        schemaVersion: dv.getUint16(4, true),
+        fwMajor: d[6],
+        fwMinor: d[7],
+        fwPatch: d[8],
+        hwRev: dv.getUint16(9, true),
+        hasActive: d[11] !== 0,
+        configVersion: dv.getUint32(12, true),
+    }
+}
+
+export function parseCapabilities(d: Uint8Array): number {
+    return new DataView(d.buffer, d.byteOffset, d.byteLength).getUint32(0, true)
+}
+
+/* ── universal frame codec ──────────────────────────────────────────────── */
+
+export interface Uch {
+    version: number
+    namespace: number
+    flags: number
+    requestId: number
+    targetNode: number
+}
+
+export function buildUch(
+    namespace: number,
+    requestId: number,
+    targetNode = 0,
+    flags = 0,
+): Uint8Array {
+    const out = new Uint8Array(UCH_LEN)
+    const dv = new DataView(out.buffer)
+    out[0] = UCH_VERSION
+    out[1] = namespace
+    out[2] = flags
+    out[3] = requestId
+    dv.setUint16(4, targetNode, true)
+    dv.setUint16(6, 0, true) // reserved
+    return out
+}
+
+export function parseUch(frame: Uint8Array, off = 0): Uch {
+    const dv = new DataView(frame.buffer, frame.byteOffset, frame.byteLength)
+    return {
+        version: frame[off],
+        namespace: frame[off + 1],
+        flags: frame[off + 2],
+        requestId: frame[off + 3],
+        targetNode: dv.getUint16(off + 4, true),
+    }
+}
+
+/** Wrap a legacy inner frame in a universal `[0xE2][UCH][inner]` envelope. */
+export function buildUniversal(
+    namespace: number,
+    requestId: number,
+    inner: Uint8Array,
+    targetNode = 0,
+): Uint8Array {
+    const out = new Uint8Array(1 + UCH_LEN + inner.length)
+    out[0] = UNIVERSAL_TAG
+    out.set(buildUch(namespace, requestId, targetNode), 1)
+    out.set(inner, 1 + UCH_LEN)
+    return out
+}
+
+/* ── proto-v2 reply payloads ────────────────────────────────────────────── */
+
+export interface Limits {
+    maxUnsealedChunk: number
+    maxSealedChunk: number // universal-sealed; legacy 0xE1 path uses 32
+    transportFrameCap: number
+    blobAlign: number
+    maxConfigBytes: number
+    maxOutstandingRequests: number
+    supportsFragmentation: boolean
+}
+
+export function parseLimits(d: Uint8Array): Limits {
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
+    return {
+        maxUnsealedChunk: dv.getUint16(0, true),
+        maxSealedChunk: dv.getUint16(2, true),
+        transportFrameCap: dv.getUint16(4, true),
+        blobAlign: dv.getUint16(6, true),
+        maxConfigBytes: dv.getUint16(8, true),
+        maxOutstandingRequests: d[10],
+        supportsFragmentation: d[11] !== 0,
+    }
+}
+
+export interface PersonalityMap {
+    role: number
+    personality: number
+    protoMajor: number
+    namespaces: { namespace: number; verbMask: number }[]
+    hwCaps: number
+}
+
+export function parsePersonalityMap(d: Uint8Array): PersonalityMap {
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
+    const nsCount = d[3]
+    const namespaces: { namespace: number; verbMask: number }[] = []
+    let off = 4
+    for (let i = 0; i < nsCount; i++) {
+        namespaces.push({
+            namespace: d[off],
+            verbMask: dv.getUint16(off + 1, true),
+        })
+        off += 3
+    }
+    return {
+        role: d[0],
+        personality: d[1],
+        protoMajor: d[2],
+        namespaces,
+        hwCaps: dv.getUint32(off, true),
+    }
+}
+
+/** GET_CONFIG_METADATA reply: a 20-byte RMBC header of the selected slot. */
+export interface ConfigMetadata {
+    magic: number
+    schemaVersion: number
+    minReaderVersion: number
+    configVersion: number
+    bodyLen: number
+    crc32: number
+}
+
+export function parseConfigMetadata(d: Uint8Array): ConfigMetadata {
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
+    return {
+        magic: dv.getUint32(0, true),
+        schemaVersion: dv.getUint16(4, true),
+        minReaderVersion: dv.getUint16(6, true),
+        configVersion: dv.getUint32(8, true),
+        bodyLen: dv.getUint32(12, true),
+        crc32: dv.getUint32(16, true),
+    }
+}
+
+export interface KeymapBounds {
+    maxLayers: number
+    activeLayers: number
+    numPositions: number
+}
+
+export function parseKeymapBounds(d: Uint8Array): KeymapBounds {
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
+    return {
+        maxLayers: d[0],
+        activeLayers: d[1],
+        numPositions: dv.getUint16(2, true),
+    }
+}
+
+/** One physical key position from GET_KEY_LAYOUT — all coords in 1/100 units. */
+export interface KeyLayoutPos {
+    keycode: number
+    x: number
+    y: number
+    w: number
+    h: number
+    rot: number
+    rotx: number
+    roty: number
+}
+
+export interface KeyLayoutChunk {
+    total: number
+    start: number
+    count: number
+    positions: KeyLayoutPos[]
+}
+
+export function parseKeyLayoutChunk(d: Uint8Array): KeyLayoutChunk {
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
+    const total = dv.getUint16(0, true)
+    const start = dv.getUint16(2, true)
+    const count = d[4]
+    const positions: KeyLayoutPos[] = []
+    let off = 5
+    for (let i = 0; i < count; i++) {
+        positions.push({
+            keycode: dv.getUint16(off, true),
+            x: dv.getUint16(off + 2, true),
+            y: dv.getUint16(off + 4, true),
+            w: dv.getUint16(off + 6, true),
+            h: dv.getUint16(off + 8, true),
+            rot: dv.getUint16(off + 10, true),
+            rotx: dv.getUint16(off + 12, true),
+            roty: dv.getUint16(off + 14, true),
+        })
+        off += 16
+    }
+    return { total, start, count, positions }
+}
+
+/** Build the `u32 offset | u16 want` arg for READ_CONFIG_CHUNK. */
+export function buildReadChunkArg(offset: number, want: number): Uint8Array {
+    const out = new Uint8Array(6)
+    const dv = new DataView(out.buffer)
+    dv.setUint32(0, offset, true)
+    dv.setUint16(4, want, true)
+    return out
+}
