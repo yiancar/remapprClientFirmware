@@ -21,6 +21,17 @@ import {
 } from './protocol'
 import type { RemapprRpc } from './rpc'
 
+// pattern-check: skip — a numeric tuning constant; DiscoveryResult below is
+// pre-existing (unchanged), not a new interface.
+/** Bootstrap timeout for the legacy GET_DEVICE_INFO probe. A directly-attached
+ *  keyboard answers it in milliseconds; a dongle has no legacy dispatcher and
+ *  drops it, so a long wait there is pure latency. Keep it short — on timeout the
+ *  probe falls back to the universal COMMON verb (which both a keyboard and a
+ *  dongle answer), so a slow keyboard is not misclassified, only delayed by one
+ *  extra round trip. This is what makes connecting to a dongle feel instant
+ *  instead of ~1.5 s. */
+const LEGACY_PROBE_TIMEOUT_MS = 400
+
 export interface DiscoveryResult {
     protoMax: number
     deviceInfo: DeviceInfo
@@ -54,7 +65,13 @@ export async function discover(
     let diData: Uint8Array
     if (target === 0) {
         try {
-            diData = (await rpc.callPlain(Cmd.GET_DEVICE_INFO)).data
+            diData = (
+                await rpc.callPlain(
+                    Cmd.GET_DEVICE_INFO,
+                    undefined,
+                    LEGACY_PROBE_TIMEOUT_MS,
+                )
+            ).data
         } catch {
             // No legacy dispatcher answered (a dongle drops non-0xE2 frames):
             // fall back to the universal COMMON discovery verb addressed to the
