@@ -58,9 +58,12 @@ import type {
 import { MODIFIERS, resolveKeycode, type Modifier } from '../../keycodes'
 
 const COMBO_ANY_LAYER = 0xff
-// HID Keyboard usage page. Consumer/System pages (12, …) are a deferred gap
-// (§44.4): the firmware HID layer exposes keyboard usages only for now.
 const HID_PAGE_KEYBOARD = 7
+// Consumer page (media/volume + AC/AL). The firmware emits these through a
+// dedicated Consumer-control HID interface as BH_CONSUMER, so the behavior type
+// — not a usage-page tag in the record — disambiguates the page on the wire
+// (§44.4). GD System Control (page 1) has no catalog entries yet.
+const HID_PAGE_CONSUMER = 12
 
 const NONE_REC: BehaviorRecord = {
     type: BehaviorType.None,
@@ -411,19 +414,44 @@ function lowerAction(
 ): BehaviorRecord {
     switch (action.type) {
         case 'key_press': {
-            const usage = keyUsage(action.key, diag, path)
-            if (usage === null) return rec({ type: BehaviorType.None })
+            const u = HID_USAGE_BY_CANONICAL.get(action.key)
+            if (!u) {
+                diag.error(`no HID usage for key "${action.key}"`, path)
+                return rec({ type: BehaviorType.None })
+            }
+            if (u.page === HID_PAGE_CONSUMER) {
+                // BH_CONSUMER (37): a Consumer-page (media/volume/AC/AL) usage.
+                // The firmware asserts it on press and releases it on the up
+                // edge via the consumer HID interface; the record has no
+                // modifier field, so any mods on the binding are dropped.
+                if (action.mods?.length) {
+                    diag.warn(
+                        `consumer key "${action.key}" carries modifiers — ` +
+                            `dropped (BH_CONSUMER emits a bare Consumer usage)`,
+                        path,
+                    )
+                }
+                return rec({ type: BehaviorType.Consumer, tap: u.usage })
+            }
+            if (u.page !== HID_PAGE_KEYBOARD) {
+                diag.error(
+                    `key "${action.key}" is on HID page ${u.page} (not yet on ` +
+                        `the wire — §44.4)`,
+                    path,
+                )
+                return rec({ type: BehaviorType.None })
+            }
             if (action.mods?.length) {
                 // KEY_MODS (22): a modded key_press (e.g. Ctrl+C). tap = usage,
                 // hold = modifier mask; the firmware emits the mods + usage as
                 // one chord and retracts both on release. (§5.2, no longer a gap.)
                 return rec({
                     type: BehaviorType.KeyMods,
-                    tap: usage,
+                    tap: u.usage,
                     hold: modsToMask(action.mods),
                 })
             }
-            return rec({ type: BehaviorType.Key, tap: usage })
+            return rec({ type: BehaviorType.Key, tap: u.usage })
         }
         case 'tap_hold': {
             // MOD_TAP (3) when hold is a modifier; LAYER_TAP (4) when hold is a

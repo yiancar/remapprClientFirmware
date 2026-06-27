@@ -428,3 +428,83 @@ describe('remappr conditional layers (TBL_CONDITIONAL)', () => {
         expect(b[o + 3]).toBe(2) // if[1] = lower (index 2)
     })
 })
+
+// Consumer-page media keys (§44.4): canonical ids on HID page 12 lower to
+// BH_CONSUMER (37) carrying the bare Consumer usage, not BH_KEY. The firmware
+// already routes these through its dedicated consumer HID interface.
+// pattern-check: skip — test fixtures + assertions, no production logic
+const CONSUMER = `{
+    "schemaVersion": 1, "kind": "remappr.keymap",
+    "meta": { "name": "Media", "target": "zmk" },
+    "keyboard": { "id": "m", "name": "M",
+        "keys": [{"x":0,"y":0},{"x":1,"y":0},{"x":2,"y":0},{"x":3,"y":0}] },
+    "layers": [{ "name": "base", "bindings": [
+        "media.volume_increment", "media.volume_decrement",
+        "media.mute", "media.transport.play_pause"
+    ] }]
+}`
+
+describe('remappr consumer-page (media) keys', () => {
+    it('lowers page-12 usages to BH_CONSUMER (37)', () => {
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(CONSUMER),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        const recAt = (i: number) => beh[0] + 2 + i * 16
+        const typeOf = (i: number) => b[recAt(i)]
+        const tapOf = (i: number) => u16(b, recAt(i) + 4)
+        // Four distinct consumer usages → behaviors 0..3 in binding order.
+        expect([typeOf(0), typeOf(1), typeOf(2), typeOf(3)]).toEqual([
+            37, 37, 37, 37,
+        ])
+        expect(tapOf(0)).toBe(0xe9) // Volume Increment
+        expect(tapOf(1)).toBe(0xea) // Volume Decrement
+        expect(tapOf(2)).toBe(0xe2) // Mute
+        expect(tapOf(3)).toBe(0xb0) // Play/Pause
+    })
+
+    it('keeps a keyboard-page volume usage on BH_KEY (page 7)', () => {
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(`{
+                "schemaVersion": 1, "kind": "remappr.keymap",
+                "meta": { "name": "K", "target": "zmk" },
+                "keyboard": { "id": "k", "name": "K", "keys": [{"x":0,"y":0}] },
+                "layers": [{ "name": "base", "bindings": ["Volume Up"] }]
+            }`),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        expect(b[beh[0] + 2]).toBe(2) // BH_KEY — keyboard-page volume usage
+    })
+
+    // Byte-exact lock for the firmware cross-check: a tiny 2-key consumer
+    // fixture whose identical bytes are embedded + decoded firmware-side in
+    // tests/config_blob/golden_canonical.h. The BH_CONSUMER wire ABI cannot
+    // drift silently — change either side and one of the two tests fails.
+    // pattern-check: skip — locked golden bytes, no production logic
+    it('matches the locked consumer golden bytes (firmware cross-check)', () => {
+        const TINY_CONSUMER = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Media", "target": "zmk" },
+            "keyboard": { "id": "m", "name": "M",
+                "keys": [{"x":0,"y":0},{"x":1,"y":0}] },
+            "layers": [{ "name": "base",
+                "bindings": ["media.mute", "media.volume_increment"] }]
+        }`
+        // prettier-ignore
+        const golden = Uint8Array.from([
+            0x52, 0x4d, 0x42, 0x43, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x46, 0x00, 0x00, 0x00, 0x85, 0x46, 0x33, 0x15, 0x01, 0x00, 0x01, 0x00,
+            0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0xc8, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x01, 0x00, 0x22, 0x00, 0x00, 0x00, 0x02, 0x00, 0x25, 0x00,
+            0x00, 0x00, 0xe2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x25, 0x00, 0x00, 0x00, 0xe9, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x04, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        ])
+        expect(bytesOf(parseKeymap(TINY_CONSUMER))).toEqual(golden)
+    })
+})

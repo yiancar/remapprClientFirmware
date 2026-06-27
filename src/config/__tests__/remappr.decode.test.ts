@@ -411,3 +411,33 @@ describe('remappr round-trip (encode → decode → re-encode is byte-stable)', 
         ).toBe(true)
     })
 })
+
+// Consumer-page media keys round-trip through BH_CONSUMER (§44.4).
+// pattern-check: skip — round-trip test data, no production logic
+describe('remappr consumer round-trip (BH_CONSUMER)', () => {
+    it('encode → decode → re-encode is byte-stable for media keys', () => {
+        roundTrips(`{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Media", "target": "zmk" }, ${kb(4)},
+            "layers": [{ "name": "base", "bindings": [
+                "media.volume_increment", "media.volume_decrement",
+                "media.mute", "media.transport.play_pause"
+            ] }]
+        }`)
+    })
+
+    it('decodes BH_CONSUMER back to its consumer key_press', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "M", "target": "zmk" }, ${kb(1)},
+            "layers": [{ "name": "base", "bindings": ["media.mute"] }]
+        }`
+        const { blob } = buildRemapprBlob(parseKeymap(json), { configVersion: 1 })
+        const decoded = decodeRemapprBlob(blob)
+        expect(decoded.code).toBe(DecodeCode.OK)
+        expect(decoded.config!.layers[0].bindings[0]).toMatchObject({
+            type: 'key_press',
+            key: 'media.mute',
+        })
+    })
+})

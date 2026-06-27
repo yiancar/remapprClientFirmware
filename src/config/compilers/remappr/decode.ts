@@ -65,6 +65,7 @@ import {
 } from './blobWriter'
 
 const HID_PAGE_KEYBOARD = 7
+const HID_PAGE_CONSUMER = 12
 
 /** Decode result codes — mirror enum remappr_config_result (config_blob.h). */
 export const DecodeCode = {
@@ -175,6 +176,11 @@ function usageToKey(usage: number): CanonicalKeyId | null {
     return HID_USAGE_DECODE.get((HID_PAGE_KEYBOARD << 16) | usage) ?? null
 }
 
+/** Consumer-page HID usage → canonical key id, or null if not in the catalog. */
+function consumerUsageToKey(usage: number): CanonicalKeyId | null {
+    return HID_USAGE_DECODE.get((HID_PAGE_CONSUMER << 16) | usage) ?? null
+}
+
 /** Single modifier-mask bit → Modifier (lowest set bit wins). */
 function maskToMod(mask: number): Modifier | null {
     for (let i = 0; i < 8; i++) if (mask & (1 << i)) return MODIFIERS[i]
@@ -241,6 +247,18 @@ function behaviorToAction(rec: BehaviorRecord, ctx: DecodeCtx): CanonAction {
             const k = keyOf(rec.tap)
             return k ? keyPress(rec.tap, maskToMods(rec.hold)) : { type: 'none' }
         }
+        case BehaviorType.Consumer: {
+            const k = consumerUsageToKey(rec.tap)
+            if (k === null) {
+                diag.warn(`unknown consumer usage 0x${rec.tap.toString(16)}`, path)
+                return { type: 'none' }
+            }
+            return { type: 'key_press', key: k }
+        }
+        case BehaviorType.SysCtrl:
+            // Firmware-supported (BH_SYS_CTRL) but no GD system-control catalog
+            // entries exist host-side yet, so nothing decodes back to it (§44.4).
+            return unmodeled('sys_ctrl (GD system control)')
         case BehaviorType.ModTap: {
             const k = keyOf(rec.tap)
             const mod = maskToMod(rec.hold)

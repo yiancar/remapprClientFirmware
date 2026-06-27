@@ -35,7 +35,7 @@ export const TableId = {
     ActionBinding: 17,
 } as const
 
-// enum remappr_behavior_type (behavior_table.h) — 37 types, 0..36 (dense). The
+// enum remappr_behavior_type (behavior_table.h) — 39 types, 0..38 (dense). The
 // 16-byte record layout is identical across all types; only `type` and the
 // interpretation of tap/hold/term/quick/prior differ.
 export const BehaviorType = {
@@ -78,6 +78,8 @@ export const BehaviorType = {
     MacroRecord: 34, // tap = dynamic-macro slot
     MacroPlay: 35, // tap = dynamic-macro slot
     Peripheral: 36, // tap = peripheral_kind, hold = code
+    Consumer: 37, // tap = Consumer-page usage (media keys); press + release edges
+    SysCtrl: 38, // tap = GD System Control usage (power/sleep/wake)
 } as const
 
 // enum remappr_system_action (behavior_table.h) — carried in BH_SYSTEM `tap`.
