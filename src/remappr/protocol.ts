@@ -165,6 +165,17 @@ export const DongleVerb = {
     GET_NODE_INFO: 0x02,
 } as const
 
+/** Device role (enum remappr_role, firmware include/remappr/role.h) — reported as
+ *  byte 0 of GET_PERSONALITY_MAP. A dongle self-identifies as DONGLE so the host
+ *  takes the roster path instead of the keyboard connect path. */
+export const Role = {
+    NODE: 0,
+    DONGLE: 1,
+    RADIO_COPROCESSOR: 2,
+    BRIDGE: 3,
+    DEVKIT: 4,
+} as const
+
 /* ── frag reassembly limits (control_frag / control_cli) ────────────────── */
 
 export const FRAG_REASSEMBLY_CAP = 4096

@@ -72,8 +72,10 @@ export function buildNodesApi(rpc: RemapprRpc): NodesApi {
                 activeLayoutId: loaded.activeLayoutId,
                 maxLayers: loaded.maxLayers,
                 limits: discovery.limits,
-                // No session, no keyTest, edits throw, shared RPC left intact.
+                // No session, no keyTest, edits throw. The view borrows the
+                // dongle's RPC, so it must not close it on disconnect.
                 readOnly: true,
+                sharesTransport: true,
             })
         },
     }

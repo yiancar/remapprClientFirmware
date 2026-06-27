@@ -306,6 +306,10 @@ export interface NodesApi {
 export interface KeyboardService {
     readonly deviceInfo: DeviceInfo
     readonly capabilities: Capabilities
+    /** Device class for the renderer's landing decision. `'dongle'` lands on the
+     *  node roster (no keymap of its own); omitted/`'keyboard'` opens the editor.
+     *  A behind-dongle node view is a keyboard, not a dongle. */
+    readonly kind?: 'keyboard' | 'dongle'
 
     getLockState(): Promise<LockState>
 

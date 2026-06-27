@@ -66,9 +66,17 @@ export interface RemapprServiceDeps {
     /** Max layer slots the blob reader accepts (from GET_KEYMAP_BOUNDS / default). */
     maxLayers: number
     limits?: Limits
-    /** Whole-device read-only (behind-dongle node view): every edit throws, no
-     *  keyTest, and disconnect leaves the shared dongle RPC alone. */
+    /** Whole-device read-only (behind-dongle node view + the dongle itself): every
+     *  edit throws and there is no keyTest. Does NOT decide transport ownership —
+     *  see `sharesTransport`. */
     readOnly?: boolean
+    /** True when this service borrows another service's transport (a behind-dongle
+     *  node view rides the dongle's RPC), so disconnect() must NOT tear it down.
+     *  False/omitted for a service that owns its transport (a direct keyboard or
+     *  the dongle itself), which closes it on disconnect. */
+    sharesTransport?: boolean
+    /** Device class surfaced to the renderer (`'dongle'` lands on the roster). */
+    kind?: 'keyboard' | 'dongle'
     /** Behind-dongle roster facade — set on the dongle's own service, omitted on a
      *  node view (no nesting). */
     nodes?: NodesApi
@@ -86,6 +94,8 @@ function padTo(b: Uint8Array, align: number): Uint8Array {
 export class RemapprKeyboardService implements KeyboardService {
     public readonly deviceInfo: DeviceInfo
     public readonly capabilities: Capabilities
+    /** `'dongle'` for the dongle's own service; `'keyboard'` (default) otherwise. */
+    public readonly kind: 'keyboard' | 'dongle'
     public readonly codec = remapprCodec
     /** Live matrix readout — direct devices only; a node's relayed input plane is
      *  unsupported, so read-only views omit it. */
@@ -97,6 +107,8 @@ export class RemapprKeyboardService implements KeyboardService {
     private readonly rpc: RemapprRpc
     private readonly session?: RemapprSession
     private readonly readOnly: boolean
+    /** Borrowed transport (node view) — disconnect() must not close it. */
+    private readonly sharesTransport: boolean
     /** Decoded config = source of truth; updated only on a successful commit. */
     private config: ConfigKeymap
     private configVersion: number
@@ -119,6 +131,8 @@ export class RemapprKeyboardService implements KeyboardService {
         this.rpc = deps.rpc
         this.session = deps.session
         this.readOnly = deps.readOnly ?? false
+        this.sharesTransport = deps.sharesTransport ?? false
+        this.kind = deps.kind ?? 'keyboard'
         this.nodes = deps.nodes
         this.deviceInfo = deps.deviceInfo
         this.config = deps.config
@@ -486,9 +500,10 @@ export class RemapprKeyboardService implements KeyboardService {
     async disconnect(): Promise<void> {
         if (this.closed) return
         this.fireClosed()
-        // A read-only node view shares the dongle's RPC; never tear down the shared
-        // transport (the dongle service owns it). Direct devices own their RPC.
-        if (!this.readOnly) {
+        // A node view borrows the dongle's RPC; never tear down a shared transport
+        // (its owner does). A service that owns its transport — a direct keyboard
+        // OR the dongle itself — closes it here.
+        if (!this.sharesTransport) {
             await this.rpc.close({ abortTransport: true }).catch(() => undefined)
         }
     }

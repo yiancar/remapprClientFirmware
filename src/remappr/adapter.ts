@@ -9,6 +9,7 @@ import type {
     Probe,
     ProbeHint,
 } from '../adapter'
+import type { ConfigKeymap } from '../config'
 import { TransportError } from '../errors'
 import type { KeyboardService } from '../service'
 import { readTransportIds, type Transport } from '../transport'
@@ -22,7 +23,10 @@ import {
     BLE_SERVICE_UUID,
     Cmd,
     type DeviceInfo as RawDeviceInfo,
+    DongleVerb,
+    Namespace,
     parseCapabilities,
+    Role,
     Status,
     statusName,
     USB_USAGE,
@@ -51,6 +55,8 @@ interface ProbedRemappr {
     discovery: DiscoveryResult
     deviceInfo: DeviceInfo
     capBits: number
+    /** The device self-identified (or was detected) as a ROLE_DONGLE hub. */
+    isDongle: boolean
 }
 
 const probedSessions = new WeakMap<Transport, ProbedRemappr>()
@@ -59,14 +65,53 @@ const probedSessions = new WeakMap<Transport, ProbedRemappr>()
 function toClientDeviceInfo(
     raw: RawDeviceInfo,
     transport: Transport,
+    isDongle = false,
 ): DeviceInfo {
     const ids = readTransportIds(transport)
     return {
-        name: 'Remappr Keyboard',
+        name: isDongle ? 'Remappr Dongle' : 'Remappr Keyboard',
         firmware: 'remappr',
         firmwareVersion: `${raw.fwMajor}.${raw.fwMinor}.${raw.fwPatch}`,
         vid: ids.vid,
         pid: ids.pid,
+    }
+}
+
+/** Detect a dongle that does NOT self-identify via COMMON discovery (older
+ *  firmware serves only the DONGLE namespace). A LIST_NODES probe that answers OK
+ *  marks it a dongle; synthesize a minimal discovery result with role = DONGLE.
+ *  Throws when the device is not a dongle (the caller then reports "not Remappr").*/
+async function probeDongleFallback(rpc: RemapprRpc): Promise<DiscoveryResult> {
+    const r = await rpc.callUniversalPlain(Namespace.DONGLE, DongleVerb.LIST_NODES)
+    if (r.status !== Status.OK) {
+        throw new TransportError('not a Remappr dongle (LIST_NODES refused)')
+    }
+    return {
+        protoMax: 2,
+        role: Role.DONGLE,
+        deviceInfo: {
+            protoMin: 1,
+            protoMax: 2,
+            schemaVersion: 0,
+            fwMajor: 0,
+            fwMinor: 0,
+            fwPatch: 0,
+            hwRev: 0,
+            hasActive: false,
+            configVersion: 0,
+        },
+    }
+}
+
+/** A minimal empty keymap for the dongle's own service — it has no config store,
+ *  and the renderer lands on the node roster rather than the editor. */
+function makeDongleConfig(): ConfigKeymap {
+    return {
+        schemaVersion: 1,
+        kind: 'remappr.keymap',
+        meta: { name: 'Remappr Dongle', target: null },
+        keyboard: { id: 'remappr-dongle', name: 'Remappr Dongle', keys: [] },
+        layers: [],
     }
 }
 
@@ -75,23 +120,43 @@ function toClientDeviceInfo(
 async function probeRemappr(transport: Transport): Promise<ProbedRemappr | null> {
     const rpc = createRemapprRpc(transport)
     try {
-        const discovery = await discover(rpc)
-        let capBits = 0
+        let discovery: DiscoveryResult
         try {
-            const caps = await rpc.callPlain(
-                Cmd.GET_CAPABILITIES,
-                undefined,
-                PROBE_TIMEOUT_MS,
-            )
-            if (caps.status === Status.OK) capBits = parseCapabilities(caps.data)
+            discovery = await discover(rpc)
         } catch {
-            /* capabilities are optional on older firmware */
+            // Not a self-identifying device. It may still be a dongle running
+            // older firmware that serves only the DONGLE namespace — last resort,
+            // probe LIST_NODES (throws here when it is not a dongle either).
+            discovery = await probeDongleFallback(rpc)
+        }
+        const isDongle = discovery.role === Role.DONGLE
+
+        // GET_CAPABILITIES is a keyboard verb on the legacy path; a dongle drops
+        // it (and would cost a probe-timeout), so skip it for a dongle.
+        let capBits = 0
+        if (!isDongle) {
+            try {
+                const caps = await rpc.callPlain(
+                    Cmd.GET_CAPABILITIES,
+                    undefined,
+                    PROBE_TIMEOUT_MS,
+                )
+                if (caps.status === Status.OK)
+                    capBits = parseCapabilities(caps.data)
+            } catch {
+                /* capabilities are optional on older firmware */
+            }
         }
         return {
             rpc,
             discovery,
-            deviceInfo: toClientDeviceInfo(discovery.deviceInfo, transport),
+            deviceInfo: toClientDeviceInfo(
+                discovery.deviceInfo,
+                transport,
+                isDongle,
+            ),
             capBits,
+            isDongle,
         }
     } catch {
         await rpc.close({ abortTransport: true }).catch(() => undefined)
@@ -146,7 +211,7 @@ export const remapprAdapter: FirmwareAdapter = {
                 throw new TransportError('Remappr probe failed during connect')
             }
         }
-        const { rpc, discovery, deviceInfo } = probed
+        const { rpc, discovery, deviceInfo, isDongle } = probed
 
         if (signal.aborted) {
             await rpc.close({ abortTransport: true }).catch(() => undefined)
@@ -161,6 +226,26 @@ export const remapprAdapter: FirmwareAdapter = {
         )
 
         try {
+            if (isDongle) {
+                // A dongle has no auth session or config of its own (§7.2): skip
+                // the §19 handshake and config load, and surface the node roster.
+                // The service owns the transport (closes it on disconnect) but
+                // rejects edits (no keymap) and lands on the roster (kind).
+                return new RemapprKeyboardService({
+                    rpc,
+                    deviceInfo,
+                    config: makeDongleConfig(),
+                    configVersion: 0,
+                    layouts: [],
+                    activeLayoutId: 0,
+                    maxLayers: 0,
+                    limits: discovery.limits,
+                    readOnly: true,
+                    kind: 'dongle',
+                    nodes: buildNodesApi(rpc),
+                })
+            }
+
             const session = await establishSession(rpc)
 
             const loaded = await loadDeviceConfig(rpc, discovery)
