@@ -10,7 +10,7 @@ import {
 } from './protocol'
 import type { RemapprRpc, UniversalReply } from './rpc'
 
-// One 13-byte §5.9 node record.
+// One 14-byte §5.9 node record. `batt` defaults to 0xff (unknown -> null).
 function rec(
     shortId: number,
     personality: number,
@@ -19,6 +19,7 @@ function rec(
     hop: number,
     rssi: number,
     tail: number[],
+    batt = 0xff,
 ): Uint8Array {
     const b = new Uint8Array(NODE_RECORD_LEN)
     const dv = new DataView(b.buffer)
@@ -29,6 +30,7 @@ function rec(
     b[5] = hop
     b[6] = rssi & 0xff // i8 two's-complement
     b.set(tail, 7)
+    b[13] = batt
     return b
 }
 
@@ -49,7 +51,7 @@ function fakeRpc(
 describe('node enumeration (DONGLE namespace)', () => {
     it('parses a packed LIST_NODES reply (signed rssi, flags, id tail)', async () => {
         const data = new Uint8Array([
-            ...rec(7, 0x10, 3, 0x03, 1, -40, [1, 2, 3, 4, 5, 6]),
+            ...rec(7, 0x10, 3, 0x03, 1, -40, [1, 2, 3, 4, 5, 6], 85),
             ...rec(9, 0x11, 4, 0x01, 2, -70, [0xaa, 0xbb, 0, 0, 0, 0]),
         ])
         const rpc = fakeRpc(async (ns, verb) => {
@@ -68,11 +70,13 @@ describe('node enumeration (DONGLE namespace)', () => {
             hopCount: 1,
             rssi: -40,
             deviceIdTail: '010203040506',
+            battery: 85,
         })
         expect(nodes[1].bonded).toBe(false)
         expect(nodes[1].online).toBe(true)
         expect(nodes[1].rssi).toBe(-70)
         expect(nodes[1].deviceIdTail).toBe('aabb00000000')
+        expect(nodes[1].battery).toBeNull() // 0xff -> unknown
     })
 
     it('returns [] when the device is not a dongle (ERR_CMD)', async () => {

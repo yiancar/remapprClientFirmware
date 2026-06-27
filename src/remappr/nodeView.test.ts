@@ -56,7 +56,7 @@ function deviceInfoBytes(): Uint8Array {
     return d
 }
 
-/** Pack one DONGLE.LIST_NODES record (§5.9, 13 bytes). */
+/** Pack one DONGLE.LIST_NODES record (§5.9, 14 bytes). */
 function nodeRecordBytes(
     shortId: number,
     personality: number,
@@ -74,6 +74,7 @@ function nodeRecordBytes(
     d[5] = hop
     d[6] = rssi & 0xff // i8
     for (let i = 0; i < 6; i++) d[7 + i] = tail[i] ?? 0
+    d[13] = 0xff // battery_soc: unknown
     return d
 }
 

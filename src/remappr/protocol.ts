@@ -491,11 +491,14 @@ export interface NodeRecord {
     hopCount: number
     rssi: number // i8 dBm (signed)
     deviceIdTail: string // 6-byte hex
+    /** Battery state-of-charge 0..100, or null when the node has not reported
+     *  one (firmware sends 0xFF = unknown). */
+    battery: number | null
 }
 
 /** Wire size of one node record: u16 short_id, u8 personality, u8 pipe, u8 flags,
- *  u8 hop_count, i8 rssi, 6×u8 device_id_tail. */
-export const NODE_RECORD_LEN = 13
+ *  u8 hop_count, i8 rssi, 6×u8 device_id_tail, u8 battery_soc (0xFF = unknown). */
+export const NODE_RECORD_LEN = 14
 
 export function parseNodeRecord(d: Uint8Array, off = 0): NodeRecord {
     const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
@@ -503,6 +506,7 @@ export function parseNodeRecord(d: Uint8Array, off = 0): NodeRecord {
     let tail = ''
     for (let i = 0; i < 6; i++)
         tail += d[off + 7 + i].toString(16).padStart(2, '0')
+    const batt = d[off + 13]
     return {
         shortId: dv.getUint16(off, true),
         personality: d[off + 2],
@@ -512,10 +516,11 @@ export function parseNodeRecord(d: Uint8Array, off = 0): NodeRecord {
         hopCount: d[off + 5],
         rssi: (d[off + 6] << 24) >> 24, // sign-extend i8
         deviceIdTail: tail,
+        battery: batt === 0xff ? null : batt,
     }
 }
 
-/** Parse a packed LIST_NODES reply (concatenated 13-byte records). A trailing
+/** Parse a packed LIST_NODES reply (concatenated 14-byte records). A trailing
  *  partial record (shorter than NODE_RECORD_LEN) is ignored. */
 export function parseNodeList(d: Uint8Array): NodeRecord[] {
     const out: NodeRecord[] = []
