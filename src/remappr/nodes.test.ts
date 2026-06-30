@@ -1,6 +1,12 @@
 // pattern-check: skip — node-enumeration test fixtures against a fake rpc.
 import { describe, expect, it } from 'vitest'
-import { forgetNode, getNodeInfo, listNodes, openPairWindow } from './nodes'
+import {
+    clearAllBonds,
+    forgetNode,
+    getNodeInfo,
+    listNodes,
+    openPairWindow,
+} from './nodes'
 import {
     DongleVerb,
     Namespace,
@@ -157,5 +163,31 @@ describe('dongle pairing control (DONGLE namespace)', () => {
             data: new Uint8Array(),
         }))
         await expect(forgetNode(rpc, 99)).rejects.toThrow(/FORGET_NODE/)
+    })
+
+    it('clearAllBonds sends the verb (no arg) and returns the cleared count', async () => {
+        const rpc = fakeRpc(async (ns, verb, arg) => {
+            expect(ns).toBe(Namespace.DONGLE)
+            expect(verb).toBe(DongleVerb.CLEAR_ALL_BONDS)
+            expect(arg).toBeUndefined()
+            return { status: Status.OK, data: new Uint8Array([5]) }
+        })
+        await expect(clearAllBonds(rpc)).resolves.toBe(5)
+    })
+
+    it('clearAllBonds defaults to 0 when the reply omits the count', async () => {
+        const rpc = fakeRpc(async () => ({
+            status: Status.OK,
+            data: new Uint8Array(),
+        }))
+        await expect(clearAllBonds(rpc)).resolves.toBe(0)
+    })
+
+    it('clearAllBonds throws on a non-dongle device (ERR_CMD)', async () => {
+        const rpc = fakeRpc(async () => ({
+            status: Status.ERR_CMD,
+            data: new Uint8Array(),
+        }))
+        await expect(clearAllBonds(rpc)).rejects.toThrow(/CLEAR_ALL_BONDS/)
     })
 })

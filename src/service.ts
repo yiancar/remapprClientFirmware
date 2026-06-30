@@ -317,6 +317,16 @@ export interface NodesApi {
     /** Unbond a node by id, clearing a stale dongle bond so its pipe is free to
      *  re-pair. Rejects on an unknown id. */
     forgetNode(id: number): Promise<void>
+
+    /** Tell a node to forget its dongle bond and re-arm for a fresh pair
+     *  (owner-sealed COMMON.UNPAIR_RADIO, §19). Establishes a node session over
+     *  the relay, then sends the sealed verb. Rejects on a failed handshake or a
+     *  refused seal. The relayed-seal data plane is HW-proof-pending. */
+    unpairRadio(id: number): Promise<void>
+
+    /** Wipe the dongle's entire bond table (recovery for stale bonds that
+     *  forgetNode can't reach). Resolves to the number of pipes unbonded. */
+    clearAllBonds(): Promise<number>
 }
 
 export interface KeyboardService {

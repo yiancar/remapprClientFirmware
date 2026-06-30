@@ -34,6 +34,8 @@ export {
     listNodes,
     getNodeInfo,
     establishNodeSession,
+    unpairRadio,
+    clearAllBonds,
     type NodeRecord,
 } from './nodes'
 export * as remapprProtocol from './protocol'
