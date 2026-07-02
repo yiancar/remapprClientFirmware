@@ -14,13 +14,17 @@ import {
     Namespace,
     Status,
 } from './protocol'
-import type { RemapprRpc } from './rpc'
+import { type RemapprRpc, RELAY_READ_RETRIES } from './rpc'
 
-// Response data shares the 64-byte frame with a 6-byte response header, so a
-// single READ_CONFIG_CHUNK can carry at most 58 blob bytes. The relayed path's
-// universal framing returns fewer per reply; the device caps `want`, the loop
-// just advances by the actual length, so one constant serves both.
-const READ_CHUNK_WANT = 58
+// Direct legacy frame: 64 − 6-byte response header = 58 blob bytes per reply.
+// The RELAYED universal path adds a 0xE2 tag + 8-byte UCH, so a reply only fits
+// 64 − 1 − 8 − 6 = 49 bytes before it FRAGments — and the dongle does not forward
+// a FRAG chain, so the app hangs on the missing continuation (Remappr RPC timeout
+// after 2000 ms on "open node"). Request ≤48 (the advertised max_unsealed_chunk)
+// over the relay so every chunk is a single frame; the device caps to the actual
+// blob length and the loop advances by what it returns.
+const READ_CHUNK_WANT_DIRECT = 58
+const READ_CHUNK_WANT_RELAY = 48
 
 /**
  * Read the full active blob over the plaintext READ_CONFIG_CHUNK loop. With
@@ -38,9 +42,10 @@ export async function readConfigBlob(
     const chunks: Uint8Array[] = []
     let offset = 0
     let total = 0
+    const want = target === 0 ? READ_CHUNK_WANT_DIRECT : READ_CHUNK_WANT_RELAY
     let guard = 0
     while (guard++ < 8192) {
-        const arg = buildReadChunkArg(offset, READ_CHUNK_WANT)
+        const arg = buildReadChunkArg(offset, want)
         const r =
             target === 0
                 ? await rpc.callPlain(Cmd.READ_CONFIG_CHUNK, arg)
@@ -48,7 +53,7 @@ export async function readConfigBlob(
                       Namespace.COMMON,
                       Cmd.READ_CONFIG_CHUNK,
                       arg,
-                      { targetNode: target },
+                      { targetNode: target, retries: RELAY_READ_RETRIES },
                   )
         if (r.status !== Status.OK || r.data.length === 0) break // EOF
         chunks.push(r.data)

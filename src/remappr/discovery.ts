@@ -19,7 +19,7 @@ import {
     Status,
     statusName,
 } from './protocol'
-import type { RemapprRpc } from './rpc'
+import { type RemapprRpc, RELAY_READ_RETRIES } from './rpc'
 
 // pattern-check: skip — a numeric tuning constant; DiscoveryResult below is
 // pre-existing (unchanged), not a new interface.
@@ -95,7 +95,7 @@ export async function discover(
             Namespace.COMMON,
             Cmd.GET_DEVICE_INFO,
             undefined,
-            { targetNode: target },
+            { targetNode: target, retries: RELAY_READ_RETRIES },
         )
         if (r.status !== Status.OK)
             throw new Error(
@@ -115,7 +115,7 @@ export async function discover(
             Namespace.COMMON,
             CommonVerb.GET_PERSONALITY_MAP,
             undefined,
-            { targetNode: target },
+            { targetNode: target, retries: RELAY_READ_RETRIES },
         )
         if (pm.status === Status.OK) personality = parsePersonalityMap(pm.data)
     } catch {
@@ -126,7 +126,7 @@ export async function discover(
             Namespace.COMMON,
             CommonVerb.GET_LIMITS,
             undefined,
-            { targetNode: target },
+            { targetNode: target, retries: RELAY_READ_RETRIES },
         )
         if (lim.status === Status.OK) limits = parseLimits(lim.data)
     } catch {

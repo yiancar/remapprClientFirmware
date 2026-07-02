@@ -7,7 +7,7 @@
 // any fetch failure fall back to a synthetic grid sized to the keymap's position
 // count (derived from the decoded blob's binding count).
 import type { PhysicalLayout, PhysicalLayoutKey } from '../types'
-import type { RemapprRpc } from './rpc'
+import { type RemapprRpc, RELAY_READ_RETRIES } from './rpc'
 import {
     KeyboardVerb,
     Namespace,
@@ -17,26 +17,41 @@ import {
 } from './protocol'
 
 const U = 100 // one key unit in centi-units (renderer scale)
+// A relayed layout fetch is many round-trips (one per chunk); on a flapping
+// 2.4 GHz link a single dropout aborts the whole sequence, so retry the entire
+// fetch a few times before giving up on the real geometry.
+const LAYOUT_FETCH_ATTEMPTS = 3
 
 const u16le = (v: number): Uint8Array =>
     Uint8Array.of(v & 0xff, (v >> 8) & 0xff)
 
+interface LayoutFetch {
+    /** The real per-key layout, or null when the chunk stream couldn't be read
+     *  in full (e.g. the relay link flapped mid-sequence). */
+    layout: PhysicalLayout | null
+    /** Position count from GET_KEYMAP_BOUNDS — a single, reliable read even when
+     *  the multi-chunk layout can't complete. 0 if bounds itself failed. */
+    numPositions: number
+}
+
 /** Fetch the device's real per-key layout over the universal KEYBOARD verbs.
- *  `targetNode` (default 0) addresses a node behind a dongle (§6.2). Returns null
- *  if the device can't answer (caller falls back to synthetic). */
+ *  `targetNode` (default 0) addresses a node behind a dongle (§6.2). `layout` is
+ *  null when the per-key stream can't be read in full; `numPositions` still
+ *  carries the real key count from the (single-read) bounds so the caller can
+ *  size a grid to it instead of the decoded-blob count. */
 async function fetchRealLayout(
     rpc: RemapprRpc,
     targetNode = 0,
-): Promise<PhysicalLayout | null> {
+): Promise<LayoutFetch> {
     const boundsReply = await rpc.callUniversalPlain(
         Namespace.KEYBOARD,
         KeyboardVerb.GET_KEYMAP_BOUNDS,
         undefined,
-        { targetNode },
+        { targetNode, retries: RELAY_READ_RETRIES },
     )
-    if (boundsReply.status !== Status.OK) return null
+    if (boundsReply.status !== Status.OK) return { layout: null, numPositions: 0 }
     const bounds = parseKeymapBounds(boundsReply.data)
-    if (bounds.numPositions <= 0) return null
+    if (bounds.numPositions <= 0) return { layout: null, numPositions: 0 }
 
     const keys: PhysicalLayoutKey[] = []
     let start = 0
@@ -46,9 +61,11 @@ async function fetchRealLayout(
             Namespace.KEYBOARD,
             KeyboardVerb.GET_KEY_LAYOUT,
             u16le(start),
-            { targetNode },
+            { targetNode, retries: RELAY_READ_RETRIES },
         )
-        if (reply.status !== Status.OK) return null
+        // A dropped chunk poisons this attempt — bail so the caller can retry the
+        // whole fetch (a partial layout would render wrong). numPositions is kept.
+        if (reply.status !== Status.OK) break
         const chunk = parseKeyLayoutChunk(reply.data)
         if (chunk.count === 0) break
         for (const p of chunk.positions) {
@@ -63,7 +80,11 @@ async function fetchRealLayout(
         }
         start = chunk.start + chunk.count
     }
-    return keys.length > 0 ? { id: 0, name: 'Remappr', keys } : null
+    const layout =
+        keys.length === bounds.numPositions
+            ? { id: 0, name: 'Remappr', keys }
+            : null
+    return { layout, numPositions: bounds.numPositions }
 }
 
 /** A plain row-major grid sized to `keyCount`, in centi-units. */
@@ -90,11 +111,25 @@ export async function fetchPhysicalLayouts(
     opts: { protoMax: number; fallbackKeyCount: number; targetNode?: number },
 ): Promise<{ layouts: PhysicalLayout[]; activeLayoutId: number }> {
     if (opts.protoMax >= 2) {
-        try {
-            const real = await fetchRealLayout(rpc, opts.targetNode ?? 0)
-            if (real) return { layouts: [real], activeLayoutId: 0 }
-        } catch {
-            /* fall through to synthetic */
+        let positionCount = 0
+        for (let attempt = 0; attempt < LAYOUT_FETCH_ATTEMPTS; attempt++) {
+            try {
+                const { layout, numPositions } = await fetchRealLayout(
+                    rpc,
+                    opts.targetNode ?? 0,
+                )
+                if (layout) return { layouts: [layout], activeLayoutId: 0 }
+                if (numPositions > 0) positionCount = numPositions
+            } catch {
+                /* transient — try the whole fetch again */
+            }
+        }
+        // Real per-key geometry unreadable (link too flappy to stream every
+        // chunk). A grid sized to the device's real position count still shows
+        // every key — prefer it over the decoded-blob count, which can be 1 when
+        // the config read also truncated on the same flap.
+        if (positionCount > 0) {
+            return { layouts: [syntheticLayout(positionCount)], activeLayoutId: 0 }
         }
     }
     return {
