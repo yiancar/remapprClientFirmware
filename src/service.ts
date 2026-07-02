@@ -296,6 +296,11 @@ export interface NodeView {
     rssi: number
     /** Mesh hops to reach the node (0 = direct child of the dongle). */
     hopCount: number
+    /** The node holds the §5 master (MAIN) election role. Exactly one bonded node
+     *  is master in a cluster; false for every node until one reports a role. */
+    isMaster: boolean
+    /** Raw §5 election-role low byte (0 = unknown); `isMaster` is the decoded bit. */
+    nodeRole: number
 }
 
 export interface NodesApi {

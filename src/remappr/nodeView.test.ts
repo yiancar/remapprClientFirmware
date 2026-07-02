@@ -56,7 +56,7 @@ function deviceInfoBytes(): Uint8Array {
     return d
 }
 
-/** Pack one DONGLE.LIST_NODES record (§5.9, 14 bytes). */
+/** Pack one DONGLE.LIST_NODES record (§5.9, 15 bytes). */
 function nodeRecordBytes(
     shortId: number,
     personality: number,
@@ -64,22 +64,25 @@ function nodeRecordBytes(
     hop: number,
     rssi: number,
     tail: number[],
+    role = 0,
 ): Uint8Array {
     const d = new Uint8Array(NODE_RECORD_LEN)
     const dv = new DataView(d.buffer)
     dv.setUint16(0, shortId, true)
     d[2] = personality
     d[3] = 1 // pipe
-    d[4] = flags // bit0 online, bit1 bonded
+    d[4] = flags // bit0 online, bit1 bonded, bit3 master
     d[5] = hop
     d[6] = rssi & 0xff // i8
     for (let i = 0; i < 6; i++) d[7 + i] = tail[i] ?? 0
     d[13] = 0xff // battery_soc: unknown
+    d[14] = role // §5 election-role low byte
     return d
 }
 
 const ROSTER = new Uint8Array([
-    ...nodeRecordBytes(0x0007, 2, 0x03, 0, -40, [1, 2, 3, 4, 5, 6]),
+    // flags 0x0b = online+bonded+master, role 0x01 = STANDALONE_MAIN
+    ...nodeRecordBytes(0x0007, 2, 0x0b, 0, -40, [1, 2, 3, 4, 5, 6], 0x01),
     ...nodeRecordBytes(0x0009, 4, 0x01, 1, -72, [9, 9, 9, 9, 9, 9]),
 ])
 
@@ -171,6 +174,8 @@ describe('buildNodesApi.list', () => {
             bonded: true,
             rssi: -40,
             hopCount: 0,
+            isMaster: true,
+            nodeRole: 0x01,
         })
         expect(nodes[1]).toMatchObject({
             id: 0x0009,
@@ -179,6 +184,8 @@ describe('buildNodesApi.list', () => {
             bonded: false,
             rssi: -72,
             hopCount: 1,
+            isMaster: false,
+            nodeRole: 0,
         })
     })
 

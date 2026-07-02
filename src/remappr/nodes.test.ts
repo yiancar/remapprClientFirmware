@@ -16,7 +16,8 @@ import {
 } from './protocol'
 import type { RemapprRpc, UniversalReply } from './rpc'
 
-// One 14-byte §5.9 node record. `batt` defaults to 0xff (unknown -> null).
+// One 15-byte §5.9 node record. `batt` defaults to 0xff (unknown -> null);
+// `role` (§5 election-role low byte) defaults to 0 (unknown, non-master).
 function rec(
     shortId: number,
     personality: number,
@@ -26,6 +27,7 @@ function rec(
     rssi: number,
     tail: number[],
     batt = 0xff,
+    role = 0,
 ): Uint8Array {
     const b = new Uint8Array(NODE_RECORD_LEN)
     const dv = new DataView(b.buffer)
@@ -37,6 +39,7 @@ function rec(
     b[6] = rssi & 0xff // i8 two's-complement
     b.set(tail, 7)
     b[13] = batt
+    b[14] = role
     return b
 }
 
@@ -78,6 +81,8 @@ describe('node enumeration (DONGLE namespace)', () => {
             rssi: -40,
             deviceIdTail: '010203040506',
             battery: 85,
+            master: false,
+            nodeRole: 0,
         })
         expect(nodes[1].bonded).toBe(false)
         expect(nodes[1].online).toBe(true)
@@ -85,6 +90,23 @@ describe('node enumeration (DONGLE namespace)', () => {
         expect(nodes[1].rssi).toBe(-70)
         expect(nodes[1].deviceIdTail).toBe('aabb00000000')
         expect(nodes[1].battery).toBeNull() // 0xff -> unknown
+        expect(nodes[1].master).toBe(false)
+        expect(nodes[1].nodeRole).toBe(0)
+    })
+
+    it('decodes the §5 master flag + node_role byte', async () => {
+        const data = new Uint8Array([
+            // flags 0x0b = online+bonded+master; role 0x02 = CLUSTER_MAIN
+            ...rec(7, 0x10, 3, 0x0b, 0, -40, [1, 2, 3, 4, 5, 6], 90, 0x02),
+            // online only, no master bit, role 0
+            ...rec(9, 0x11, 4, 0x01, 1, -70, [0, 0, 0, 0, 0, 0]),
+        ])
+        const rpc = fakeRpc(async () => ({ status: Status.OK, data }))
+        const nodes = await listNodes(rpc)
+        expect(nodes[0].master).toBe(true)
+        expect(nodes[0].nodeRole).toBe(0x02)
+        expect(nodes[1].master).toBe(false)
+        expect(nodes[1].nodeRole).toBe(0)
     })
 
     it('returns [] when the device is not a dongle (ERR_CMD)', async () => {

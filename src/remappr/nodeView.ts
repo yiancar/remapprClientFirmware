@@ -34,6 +34,8 @@ function toNodeView(r: NodeRecord): NodeView {
         bonded: r.bonded,
         rssi: r.rssi,
         hopCount: r.hopCount,
+        isMaster: r.master,
+        nodeRole: r.nodeRole,
     }
 }
 

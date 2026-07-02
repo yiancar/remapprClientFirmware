@@ -172,6 +172,10 @@ export const DongleVerb = {
     /** Wipe the whole bond table (pipes 1..7) — recovers a dongle whose pipes are
      *  full of stale/incomplete (short-id 0) bonds that FORGET_NODE cannot clear. */
     CLEAR_ALL_BONDS: 0x05,
+    /** Return the §5 master node's record (one NODE_RECORD_LEN blob), or ERR_STATE
+     *  when no bonded node reports a MAIN election role. The roster already carries
+     *  a `master` flag per record, so this is a convenience lookup. */
+    GET_MASTER: 0x06,
 } as const
 
 /** Device role (enum remappr_role, firmware include/remappr/role.h) — reported as
@@ -519,11 +523,22 @@ export interface NodeRecord {
     /** Battery state-of-charge 0..100, or null when the node has not reported
      *  one (firmware sends 0xFF = unknown). */
     battery: number | null
+    /** The node holds a §5 MAIN election bit, so the dongle treats it as the
+     *  master. A v2/legacy node carries no role and always reads false. */
+    master: boolean
+    /** Raw §5 election-role low byte (enum remappr_node_role); 0 = unknown. Kept
+     *  alongside `master` for callers that want the exact role, not just the bit. */
+    nodeRole: number
 }
 
 /** Wire size of one node record: u16 short_id, u8 personality, u8 pipe, u8 flags,
- *  u8 hop_count, i8 rssi, 6×u8 device_id_tail, u8 battery_soc (0xFF = unknown). */
-export const NODE_RECORD_LEN = 14
+ *  u8 hop_count, i8 rssi, 6×u8 device_id_tail, u8 battery_soc (0xFF = unknown),
+ *  u8 node_role (§5 election-role low byte, 0 = unknown). */
+export const NODE_RECORD_LEN = 15
+
+/** Flags-byte bit that marks the §5 master node (mirrors firmware
+ *  REMAPPR_DONGLE_NODE_F_MASTER). */
+const NODE_F_MASTER = 0x08
 
 export function parseNodeRecord(d: Uint8Array, off = 0): NodeRecord {
     const dv = new DataView(d.buffer, d.byteOffset, d.byteLength)
@@ -543,10 +558,12 @@ export function parseNodeRecord(d: Uint8Array, off = 0): NodeRecord {
         rssi: (d[off + 6] << 24) >> 24, // sign-extend i8
         deviceIdTail: tail,
         battery: batt === 0xff ? null : batt,
+        master: (flags & NODE_F_MASTER) !== 0,
+        nodeRole: d[off + 14],
     }
 }
 
-/** Parse a packed LIST_NODES reply (concatenated 14-byte records). A trailing
+/** Parse a packed LIST_NODES reply (concatenated 15-byte records). A trailing
  *  partial record (shorter than NODE_RECORD_LEN) is ignored. */
 export function parseNodeList(d: Uint8Array): NodeRecord[] {
     const out: NodeRecord[] = []
