@@ -9,6 +9,7 @@
 import type { PhysicalLayout, PhysicalLayoutKey } from '../types'
 import { type RemapprRpc, RELAY_READ_RETRIES } from './rpc'
 import {
+    type KeyLayoutChunk,
     KeyboardVerb,
     Namespace,
     parseKeyLayoutChunk,
@@ -57,17 +58,32 @@ async function fetchRealLayout(
     let start = 0
     let guard = 0
     while (keys.length < bounds.numPositions && guard++ < 512) {
-        const reply = await rpc.callUniversalPlain(
-            Namespace.KEYBOARD,
-            KeyboardVerb.GET_KEY_LAYOUT,
-            u16le(start),
-            { targetNode, retries: RELAY_READ_RETRIES },
-        )
-        // A dropped chunk poisons this attempt — bail so the caller can retry the
-        // whole fetch (a partial layout would render wrong). numPositions is kept.
-        if (reply.status !== Status.OK) break
-        const chunk = parseKeyLayoutChunk(reply.data)
-        if (chunk.count === 0) break
+        // A relayed layout chunk ships as a §9.2 FRAG chain; a lost middle fragment
+        // reassembles a short body that parseKeyLayoutChunk rejects. Retry the same
+        // (idempotent) chunk before giving up, so one dropped fragment doesn't waste
+        // a whole outer attempt — mirrors control_cli cmd_get_layout. Direct reads
+        // (targetNode 0) never fragment this way, so no extra chunk attempts there.
+        let chunk: KeyLayoutChunk | null = null
+        const chunkAttempts = targetNode ? RELAY_READ_RETRIES : 0
+        for (let attempt = 0; attempt <= chunkAttempts; attempt++) {
+            const reply = await rpc.callUniversalPlain(
+                Namespace.KEYBOARD,
+                KeyboardVerb.GET_KEY_LAYOUT,
+                u16le(start),
+                { targetNode, retries: RELAY_READ_RETRIES },
+            )
+            // ERR_STATE / timeout is already retried inside callUniversalPlain; a
+            // non-OK status here poisons the fetch — bail so the caller retries the
+            // whole sequence (a partial layout would render wrong). numPositions kept.
+            if (reply.status !== Status.OK) break
+            try {
+                chunk = parseKeyLayoutChunk(reply.data)
+                break
+            } catch {
+                chunk = null // truncated (lost fragment) — retry the identical chunk
+            }
+        }
+        if (!chunk || chunk.count === 0) break
         for (const p of chunk.positions) {
             const rotated = p.rot !== 0
             keys.push({

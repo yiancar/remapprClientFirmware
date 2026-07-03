@@ -473,6 +473,17 @@ export function parseKeyLayoutChunk(d: Uint8Array): KeyLayoutChunk {
     const total = dv.getUint16(0, true)
     const start = dv.getUint16(2, true)
     const count = d[4]
+    // A relayed §9.2 FRAG chain that lost one middle fragment reassembles a body
+    // short by that fragment — the transport concatenates chunks by arrival order
+    // with no per-fragment sequence, so a gap is invisible there. Reject the short
+    // chunk explicitly (its header still declares the full `count`) so the caller
+    // retries the read, instead of reading past the buffer for a cryptic DataView
+    // RangeError. Mirrors control_cli cmd_get_layout's `len(body) < count*16` guard.
+    if (d.length < 5 + count * 16) {
+        throw new Error(
+            `layout chunk truncated: ${d.length - 5} B for ${count} entries`,
+        )
+    }
     const positions: KeyLayoutPos[] = []
     let off = 5
     for (let i = 0; i < count; i++) {
