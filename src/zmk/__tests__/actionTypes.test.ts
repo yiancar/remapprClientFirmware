@@ -21,11 +21,22 @@ describe('behaviorToActionType — &bt multi-set merge (issue #148)', () => {
         const cmd = at.slots[0]
         expect(cmd.kind).toBe('enum')
         expect(cmd.values).toEqual(
-            expect.arrayContaining([{ value: 3, label: 'BT_SEL' }]),
+            expect.arrayContaining([
+                { value: 3, label: 'BT_SEL', icon: 'bluetooth' },
+            ]),
         )
         // every command survives the merge, including those in non-first sets
         const values = cmd.values?.map((v) => v.value).sort((a, b) => a - b)
         expect(values).toEqual([0, 1, 2, 3, 4, 5])
+    })
+
+    it('attaches the behavior icon and per-command enum icons (issue #147)', () => {
+        expect(at.icon).toBe('bluetooth')
+        const byLabel = Object.fromEntries(
+            (at.slots[0].values ?? []).map((v) => [v.label, v.icon]),
+        )
+        expect(byLabel['BT_NXT']).toBe('next')
+        expect(byLabel['BT_DISC']).toBe('disconnect')
     })
 
     it('profile slot is a range gated on BT_SEL / BT_DISC', () => {

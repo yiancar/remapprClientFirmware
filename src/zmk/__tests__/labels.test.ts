@@ -14,6 +14,7 @@ import {
     OUT,
     RGB_UG,
     TO,
+    SOFT_OFF,
     FIXTURE_MAP,
 } from './behaviorFixtures'
 
@@ -103,6 +104,45 @@ describe('buildKeyLabel — custom behaviors render as Macro', () => {
         const caps = buildKeyLabel(bind(12), FIXTURE_MAP, keymap)
         expect(caps.primary).toBe('Caps Word')
         expect(caps.paramText).toBeUndefined()
+    })
+})
+
+describe('buildKeyLabel — composite icon parts (issue #147)', () => {
+    it('&bt BT_SEL 0 → bluetooth icon part + one-based profile text part', () => {
+        expect(labelOf(BT.id, 3, 0).paramParts).toEqual([
+            { icon: 'bluetooth', text: 'BT' },
+            { text: '1' },
+        ])
+    })
+
+    it('&bt BT_CLR → bluetooth prefix followed by the clear command part', () => {
+        expect(labelOf(BT.id, 0).paramParts).toEqual([
+            { icon: 'bluetooth', text: '' },
+            { icon: 'clear', text: 'Clr' },
+        ])
+    })
+
+    it('&rgb_ug RGB_HUI → underglow icon prefixes the text-only command', () => {
+        expect(labelOf(RGB_UG.id, 3).paramParts).toEqual([
+            { icon: 'underglow', text: '' },
+            { text: 'Hue+' },
+        ])
+    })
+
+    it('&caps_word → single caps-word icon part (zero-arg)', () => {
+        const caps = buildKeyLabel(bind(12), FIXTURE_MAP, keymap)
+        expect(caps.paramParts).toEqual([{ icon: 'caps-word', text: 'Caps' }])
+    })
+
+    it('&soft_off → single power-off icon part (zero-arg)', () => {
+        expect(labelOf(SOFT_OFF.id).paramParts).toEqual([
+            { icon: 'power-off', text: 'Off' },
+        ])
+    })
+
+    it('layer + &kp keep the plain-text path (no icon parts)', () => {
+        expect(labelOf(MO.id, 1).paramParts).toBeUndefined()
+        expect(labelOf(KP.id, 0x07_0004).paramParts).toBeUndefined()
     })
 })
 

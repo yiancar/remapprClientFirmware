@@ -6,7 +6,8 @@ import type {
 } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
 import type { ActionSlot, ActionSlotKind, ActionType } from '@firmware/types'
 import { hidUsagePageAndIdFromUsage } from '@firmware/_app/lib/actions/hidUsages'
-import { prettyBehaviorName } from './displayNameToBinding'
+import { displayNameToBinding, prettyBehaviorName } from './displayNameToBinding'
+import { ZMK_BEHAVIOR_LEGENDS, zmkTokenIcon } from './paramLabel'
 
 const MODIFIER_DISPLAY_NAME = 'Modifier'
 
@@ -50,7 +51,12 @@ function buildSlot(
 
     const enumValues = descriptions
         .filter((d) => d.constant !== undefined)
-        .map((d) => ({ value: d.constant as number, label: d.name }))
+        .map((d) => {
+            const icon = zmkTokenIcon(d.name)
+            return icon
+                ? { value: d.constant as number, label: d.name, icon }
+                : { value: d.constant as number, label: d.name }
+        })
     if (enumValues.length > 0) slot.values = enumValues
 
     return slot
@@ -167,9 +173,12 @@ export function behaviorToActionType(
         slots[0] = { ...slots[0], label: 'Hold' }
         slots[1] = { ...slots[1], label: 'Tap' }
     }
+    const icon = ZMK_BEHAVIOR_LEGENDS[displayNameToBinding(behavior.displayName)]
+        ?.icon
     return {
         id: String(behavior.id),
         displayName: prettyBehaviorName(behavior.displayName),
+        ...(icon ? { icon } : {}),
         slots,
     }
 }
