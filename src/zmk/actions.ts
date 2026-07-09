@@ -19,6 +19,7 @@ import { buildParamLabel } from '../paramLabel'
 import {
     displayNameToBinding,
     KNOWN_BINDING_PREFIXES,
+    prettyBehaviorName,
 } from './displayNameToBinding'
 import { behaviorToActionType } from './actionTypes'
 import { ZMK_SHORT_TOKENS } from './paramLabel'
@@ -152,13 +153,12 @@ export function buildKeyLabel(
         (i) => keymap.layers[i]?.name,
         ZMK_SHORT_TOKENS,
     )
+    const pretty = prettyBehaviorName(behavior.displayName)
     return {
-        primary: behavior.displayName,
+        primary: pretty,
         primaryUsage,
         ...(param.paramText ? { paramText: param.paramText } : {}),
-        description: param.longText
-            ? `${behavior.displayName}: ${param.longText}`
-            : behavior.displayName,
+        description: param.longText ? `${pretty}: ${param.longText}` : pretty,
         bindingPrefix,
     }
 }

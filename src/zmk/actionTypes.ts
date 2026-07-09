@@ -6,6 +6,7 @@ import type {
 } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
 import type { ActionSlot, ActionSlotKind, ActionType } from '@firmware/types'
 import { hidUsagePageAndIdFromUsage } from '@firmware/_app/lib/actions/hidUsages'
+import { prettyBehaviorName } from './displayNameToBinding'
 
 const MODIFIER_DISPLAY_NAME = 'Modifier'
 
@@ -168,7 +169,7 @@ export function behaviorToActionType(
     }
     return {
         id: String(behavior.id),
-        displayName: behavior.displayName,
+        displayName: prettyBehaviorName(behavior.displayName),
         slots,
     }
 }
