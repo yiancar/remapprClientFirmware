@@ -345,6 +345,7 @@ function labelFor(
             primary: meta.displayName,
             ...(p.paramText ? { paramText: p.paramText } : {}),
             ...(paramParts ? { paramParts } : {}),
+            ...(p.longText ? { valueLong: p.longText } : {}),
             bindingPrefix: meta.prefix,
             description: p.longText
                 ? `${meta.displayName}: ${p.longText}`

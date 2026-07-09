@@ -7,7 +7,11 @@ import type {
 import type { ActionSlot, ActionSlotKind, ActionType } from '@firmware/types'
 import { hidUsagePageAndIdFromUsage } from '@firmware/_app/lib/actions/hidUsages'
 import { displayNameToBinding, prettyBehaviorName } from './displayNameToBinding'
-import { ZMK_BEHAVIOR_LEGENDS, zmkTokenIcon } from './paramLabel'
+import {
+    ZMK_BEHAVIOR_LEGENDS,
+    zmkCommandLegend,
+    zmkTokenIcon,
+} from './paramLabel'
 
 const MODIFIER_DISPLAY_NAME = 'Modifier'
 
@@ -49,10 +53,16 @@ function buildSlot(
     const range = descriptions.find((d) => d.range)?.range
     if (range) slot.range = { min: range.min, max: range.max }
 
+    // Command icon by value label first (token-named on the mock / fixtures,
+    // whose constants may differ from a live device) then by (behavior &prefix,
+    // constant) — the robust path for ZMK's friendly hardware value names.
+    const prefix = displayNameToBinding(behaviorDisplayName)
     const enumValues = descriptions
         .filter((d) => d.constant !== undefined)
         .map((d) => {
-            const icon = zmkTokenIcon(d.name)
+            const icon =
+                zmkTokenIcon(d.name) ??
+                zmkCommandLegend(prefix, d.constant)?.icon
             return icon
                 ? { value: d.constant as number, label: d.name, icon }
                 : { value: d.constant as number, label: d.name }

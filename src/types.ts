@@ -42,6 +42,10 @@ export interface KeyLabel {
      *  prefers it over {@link paramText}; `paramText` stays the text join for
      *  tooltips and non-icon renderers. See LegendPart in paramLabel.ts. */
     paramParts?: LegendPart[]
+    /** Full, untruncated value name for the tooltip (e.g. "Select Profile 1",
+     *  "Toggle On/Off") when {@link paramText} is an abbreviated cap glyph
+     *  ("Sel 1", "Tog"). Unprefixed by the behavior name (that is {@link primary}). */
+    valueLong?: string
 }
 
 // Pattern check: no GoF pattern (-) — rejected — additive optional fields on plain data interfaces; no abstraction.

@@ -29,6 +29,16 @@ describe('buildParamLabel — slot-kind dispatch', () => {
         expect(buildParamLabel(slots, [2], layerName).paramText).toBe('L2')
     })
 
+    it('layer longText is the full name, "Layer <n>" when unnamed', () => {
+        const slots: ActionSlot[] = [{ label: 'Layer', kind: 'layer' }]
+        // Named layer → the name; the tooltip reads it in full.
+        expect(buildParamLabel(slots, [1], layerName).longText).toBe('FN1')
+        // Index 2's name is "" — `layerName` returns an empty string, not
+        // undefined, so longText must fall back on a truthiness test (regression:
+        // a `??` fallback left it "" and the tooltip showed the short "L2").
+        expect(buildParamLabel(slots, [2], layerName).longText).toBe('Layer 2')
+    })
+
     it('number slot → the raw number', () => {
         const slots: ActionSlot[] = [{ label: 'N', kind: 'number' }]
         expect(buildParamLabel(slots, [7], layerName).paramText).toBe('7')

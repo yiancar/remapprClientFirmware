@@ -40,8 +40,20 @@ export const LEGEND_ICON_IDS = [
     'screenshot',
     // Mouse
     'mouse',
+    'mouse-button',
+    'mouse-left',
+    'mouse-right',
     'mouse-move',
     'mouse-scroll',
+    // Direction — mouse-cursor moves / wheel scroll on keycode-picker tiles
+    'arrow-up',
+    'arrow-down',
+    'arrow-left',
+    'arrow-right',
+    'scroll-up',
+    'scroll-down',
+    'scroll-left',
+    'scroll-right',
 ] as const
 
 export type LegendIconId = (typeof LEGEND_ICON_IDS)[number]

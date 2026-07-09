@@ -36,9 +36,11 @@ const BINDING_VARIANTS: Record<string, readonly string[]> = {
     '&studio_unlock': ['Studio Unlock'],
     '&sys_reset': ['Reset', 'System Reset', 'Sys Reset'],
     '&bootloader': ['Bootloader'],
-    '&mkp': ['Mouse Button Press', 'Mouse Button'],
-    '&mmv': ['Mouse Move'],
-    '&msc': ['Mouse Scroll'],
+    '&mkp': ['Mouse Button Press', 'Mouse Button', 'Mouse Key Press'],
+    // Some firmwares report mouse move/scroll under their DT node label
+    // (lowercase, e.g. "mouse_move") rather than a friendly display name.
+    '&mmv': ['Mouse Move', 'mouse_move'],
+    '&msc': ['Mouse Scroll', 'mouse_scroll'],
 }
 
 const DISPLAY_TO_PREFIX: Map<string, string> = (() => {

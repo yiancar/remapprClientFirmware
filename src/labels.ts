@@ -17,6 +17,8 @@ export interface ResolvedBindingPosition {
     paramParts?: LegendPart[]
     /** Tooltip for the param legend (from KeyLabel.description). */
     paramTitle?: string
+    /** Full, untruncated value name for the rich tooltip (from KeyLabel.valueLong). */
+    valueLong?: string
     outOfRange: boolean
     x: number
     y: number
@@ -48,6 +50,7 @@ export function resolveBindingLabels(
             paramText: label?.paramText,
             paramParts: label?.paramParts,
             paramTitle: label?.description,
+            valueLong: label?.valueLong,
             outOfRange,
             x: k.x / 100.0,
             y: k.y / 100.0,

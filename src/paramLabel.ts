@@ -129,8 +129,14 @@ export function buildParamLabel(
 
     if (first.kind === 'layer') {
         const name = layerName(param1)
-        const text = name && name.trim().length > 0 ? name : `L${param1}`
-        return { paramText: text, longText: name ?? `Layer ${param1}` }
+        const named = !!name && name.trim().length > 0
+        // Short glyph is the layer name or "L3"; the tooltip's full form is the
+        // name or "Layer 3". `layerName` returns "" for an unnamed layer (not
+        // undefined), so a `??` fallback wouldn't fire — test truthiness.
+        return {
+            paramText: named ? name : `L${param1}`,
+            longText: named ? name : `Layer ${param1}`,
+        }
     }
 
     if (first.kind === 'number') {

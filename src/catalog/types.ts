@@ -12,6 +12,10 @@ export interface CatalogEntry {
     label: string
     name: string
     description?: string
+    // Neutral icon id (see src/legendIcons.ts) shown on the picker tile before
+    // the label — e.g. a mouse-cursor key gets an arrow, a button gets a mouse
+    // glyph. The renderer resolves it; an unknown id just shows the label.
+    icon?: string
     // Platform-support / caveats (e.g. "Globe — iOS full, macOS partial").
     // Sourced from external-names EXTERNAL_NOTES; surfaced in tooltips.
     notes?: string
