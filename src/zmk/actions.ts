@@ -22,6 +22,7 @@ import {
     prettyBehaviorName,
 } from './displayNameToBinding'
 import { behaviorToActionType } from './actionTypes'
+import { decodeMouseDelta } from './mouseZmk'
 import { ZMK_BEHAVIOR_LEGENDS, zmkShortMap } from './paramLabel'
 
 export type BehaviorMap = Record<number, GetBehaviorDetailsResponse>
@@ -142,6 +143,31 @@ export function buildKeyLabel(
             paramText: behavior.displayName,
             description: `Macro: ${behavior.displayName}`,
             bindingPrefix,
+        }
+    }
+    // Mouse move / scroll expose no param metadata on hardware, so their packed
+    // direction delta can't resolve through the enum path. Decode the known deltas
+    // back to a direction glyph (behavior icon + arrow) — the same table the picker
+    // synthesizes from, so the cap and the picker always agree.
+    if (bindingPrefix === '&mmv' || bindingPrefix === '&msc') {
+        const decoded = decodeMouseDelta(bindingPrefix, binding.param1)
+        if (decoded) {
+            const cmdPart = decoded.icon
+                ? { icon: decoded.icon, text: decoded.label }
+                : { text: decoded.label }
+            const paramParts = composeLegendParts(
+                { paramText: decoded.label, parts: [cmdPart] },
+                ZMK_BEHAVIOR_LEGENDS[bindingPrefix],
+            )
+            const pretty = prettyBehaviorName(behavior.displayName)
+            return {
+                primary: pretty,
+                paramText: decoded.label,
+                ...(paramParts ? { paramParts } : {}),
+                valueLong: decoded.label,
+                description: `${pretty}: ${decoded.label}`,
+                bindingPrefix,
+            }
         }
     }
     const primaryUsage = slots[0]?.kind === 'hid' ? binding.param1 : undefined

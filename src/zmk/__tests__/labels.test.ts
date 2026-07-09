@@ -166,3 +166,43 @@ describe('buildKeyLabel — regressions', () => {
         expect(l.holdTap?.holdNodeKind).toBe('usage')
     })
 })
+
+describe('buildKeyLabel — mouse move/scroll deltas without metadata', () => {
+    // Real hardware exposes &mmv / &msc with no param metadata; the packed
+    // direction delta must decode to a behavior icon + arrow glyph (issue #147).
+    const behaviors = {
+        60: {
+            id: 60,
+            displayName: 'mouse_move',
+            metadata: [{ param1: [{ name: '', nil: {} }] }],
+        },
+        61: {
+            id: 61,
+            displayName: 'mouse_scroll',
+            metadata: [{ param1: [{ name: '', nil: {} }] }],
+        },
+    } as unknown as typeof FIXTURE_MAP
+
+    it('&mmv move-right delta → mouse-move + arrow-right parts', () => {
+        const l = buildKeyLabel(bind(60, 0x02580000), behaviors, keymap)
+        expect(l.paramText).toBe('Move →')
+        expect(l.paramParts).toEqual([
+            { icon: 'mouse-move', text: '' },
+            { icon: 'arrow-right', text: 'Move →' },
+        ])
+    })
+
+    it('&msc scroll-down delta → mouse-scroll + scroll-down parts', () => {
+        const l = buildKeyLabel(bind(61, 0x0000fff6), behaviors, keymap)
+        expect(l.paramText).toBe('Scroll ↓')
+        expect(l.paramParts).toEqual([
+            { icon: 'mouse-scroll', text: '' },
+            { icon: 'scroll-down', text: 'Scroll ↓' },
+        ])
+    })
+
+    it('an unknown delta falls back to the behavior icon only (no crash)', () => {
+        const l = buildKeyLabel(bind(60, 0x11110000), behaviors, keymap)
+        expect(l.paramParts).toEqual([{ icon: 'mouse-move', text: '' }])
+    })
+})
