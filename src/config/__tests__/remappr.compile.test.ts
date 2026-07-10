@@ -646,3 +646,137 @@ describe('remappr GD system-control keys', () => {
         expect(bytesOf(parseKeymap(TINY_SYS))).toEqual(golden)
     })
 })
+
+// §44.3 advanced-gap closures: sticky non-mod key (BH_STICKY_KEY 39),
+// grave_escape (ANY-mod MOD_MORPH), keepMods partial (explicit suppress mask in
+// `tap`), advanced macro steps (pause_for_release + tap_time lowering) and
+// positional hold-trigger (TBL_POSHOLD).
+describe('remappr §44.3 advanced gaps', () => {
+    it('sticky_key with a non-mod key lowers to BH_STICKY_KEY', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Sk", "target": "zmk" },
+            "keyboard": { "id": "sk", "name": "Sk", "keys": [{"x":0,"y":0}] },
+            "layers": [{ "name": "base",
+                "bindings": [{ "type": "sticky_key", "key": "A" }] }]
+        }`
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(json),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        expect(b[beh[0] + 2]).toBe(39) // BehaviorType.StickyKey
+        expect(u16(b, beh[0] + 2 + 4)).toBe(0x04) // tap = usage A
+    })
+
+    it('grave_escape lowers to an ANY-mod MOD_MORPH over Esc/grave', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Ge", "target": "zmk" },
+            "keyboard": { "id": "ge", "name": "Ge", "keys": [{"x":0,"y":0}] },
+            "layers": [{ "name": "base",
+                "bindings": [{ "type": "grave_escape" }] }]
+        }`
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(json),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        expect(b[beh[0] + 2]).toBe(9) // ModMorph
+        expect(b[beh[0] + 2 + 2] & 0x08).toBe(0x08) // MORPH_ANY_MOD
+        expect(b[beh[0] + 2 + 2] & 0x04).toBe(0) // no suppression: Shift+` = ~
+        expect(u16(b, beh[0] + 2 + 6)).toBe(0xaa) // Shift|GUI trigger mask
+        const subs = findTable(b, 12)!
+        expect(u16(b, subs[0])).toBe(2)
+        expect(u16(b, subs[0] + 2 + 4)).toBe(0x29) // sub0 = Escape
+        expect(u16(b, subs[0] + 2 + 16 + 4)).toBe(0x35) // sub1 = grave
+    })
+
+    it('mod_morph keepMods partial emits the explicit suppress mask', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Km", "target": "zmk" },
+            "keyboard": { "id": "km", "name": "Km", "keys": [{"x":0,"y":0}] },
+            "layers": [{ "name": "base",
+                "bindings": [{ "type": "mod_morph", "ref": "mm" }] }],
+            "modMorphs": [{ "id": "mm",
+                "mods": ["LEFT_SHIFT", "LEFT_GUI"],
+                "keepMods": ["LEFT_GUI"],
+                "bindings": ["N", "M"] }]
+        }`
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(json),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const beh = findTable(b, 4)!
+        expect(b[beh[0] + 2 + 2] & 0x04).toBe(0x04) // MORPH_SUPPRESS_MODS
+        expect(u16(b, beh[0] + 2 + 6)).toBe(0x0a) // trigger LSHIFT|LGUI
+        expect(u16(b, beh[0] + 2 + 4)).toBe(0x02) // suppress ONLY LSHIFT (kept GUI)
+    })
+
+    it('macro pause_for_release and tap_time lower to wire steps', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Ma", "target": "zmk" },
+            "keyboard": { "id": "ma", "name": "Ma", "keys": [{"x":0,"y":0}] },
+            "layers": [{ "name": "base",
+                "bindings": [{ "type": "macro", "ref": "adv" }] }],
+            "macros": [{ "id": "adv", "steps": [
+                { "type": "press", "key": "LSHIFT" },
+                { "type": "pause_for_release" },
+                { "type": "release", "key": "LSHIFT" },
+                { "type": "tap_time", "ms": 30 },
+                { "type": "tap", "key": "A" }
+            ] }]
+        }`
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(json),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const mac = findTable(b, 6)!
+        let o = mac[0]
+        expect(u16(b, o)).toBe(1)
+        o += 2
+        // tap_time is a setting, not a step; the timed tap expands to 3 steps.
+        expect(u16(b, o)).toBe(6)
+        o += 2
+        expect([b[o], u16(b, o + 2)]).toEqual([1, 0xe1]) // PRESS LSHIFT
+        expect([b[o + 4], u16(b, o + 6)]).toEqual([4, 0]) // PAUSE_FOR_RELEASE
+        expect([b[o + 8], u16(b, o + 10)]).toEqual([2, 0xe1]) // RELEASE LSHIFT
+        expect([b[o + 12], u16(b, o + 14)]).toEqual([1, 0x04]) // PRESS A
+        expect([b[o + 16], u16(b, o + 18)]).toEqual([3, 30]) // WAIT tap_time
+        expect([b[o + 20], u16(b, o + 22)]).toEqual([2, 0x04]) // RELEASE A
+    })
+
+    it('hold_tap positional trigger emits TBL_POSHOLD', () => {
+        const json = `{
+            "schemaVersion": 1, "kind": "remappr.keymap",
+            "meta": { "name": "Ph", "target": "zmk" },
+            "keyboard": { "id": "ph", "name": "Ph",
+                "keys": [{"x":0,"y":0},{"x":1,"y":0},{"x":2,"y":0}] },
+            "layers": [{ "name": "base", "bindings": [
+                { "type": "hold_tap", "ref": "hrm", "holdParam": "LSHIFT", "tapParam": "A" },
+                "B", "C"
+            ] }],
+            "holdTaps": [{ "id": "hrm", "bindings": ["&kp", "&kp"],
+                "holdTriggerKeyPositions": [1, 2] }]
+        }`
+        const { files, diagnostics } = getCompiler('remappr').compile(
+            parseKeymap(json),
+        )
+        expect(diagnostics.filter((d) => d.level === 'error')).toHaveLength(0)
+        const b = files[0].content as Uint8Array
+        const ph = findTable(b, 18)!
+        let o = ph[0]
+        expect(u16(b, o)).toBe(1) // one poshold entry
+        o += 2
+        expect(u16(b, o)).toBe(0) // behavior index 0 (the MOD_TAP record)
+        expect(b[o + 2]).toBe(2) // two positions
+        expect(u16(b, o + 4)).toBe(1)
+        expect(u16(b, o + 6)).toBe(2)
+    })
+})

@@ -48,6 +48,7 @@ import {
     type MacroRecord,
     type MacroStep,
     type NameRecord,
+    type PosholdRecord,
 } from './blobWriter'
 import type {
     CanonHoldTapDef,
@@ -198,7 +199,11 @@ function lowerMacroStep(
             return [{ op: MacroOp.Wait, arg: Math.min(step.ms, 0xffff) }]
         case 'text':
             return textToSteps(step.text, diag, path)
+        case 'pause_for_release':
+            return [{ op: MacroOp.PauseForRelease, arg: 0 }]
         default:
+            // `param` (macro argument forwarding) remains a gap — it needs
+            // per-instance macro cloning at compile time (§44.3).
             diag.error(
                 `macro step "${step.type}" not yet on the wire — §44.3 gap`,
                 path,
@@ -216,9 +221,29 @@ function buildMacros(
     const index = new Map<string, number>()
     ;(macros ?? []).forEach((m, mi) => {
         index.set(m.id, mi)
-        const steps = m.steps.flatMap((s, si) =>
-            lowerMacroStep(s, diag, ['macros', mi, 'steps', si]),
-        )
+        // `tap_time` is a per-macro playback setting, not a wire step: it makes
+        // every LATER `tap` lower to press / wait(tap_time) / release so the
+        // host sees the key held that long (ZMK &macro_tap_time).
+        let tapMs = 0
+        const steps: MacroStep[] = []
+        m.steps.forEach((s, si) => {
+            const path = ['macros', mi, 'steps', si]
+            if (s.type === 'tap_time') {
+                tapMs = Math.min(Math.max(s.ms, 0), 0xffff)
+                return
+            }
+            if (s.type === 'tap' && tapMs > 0) {
+                const usage = keyUsage(s.key, diag, path)
+                if (usage !== null)
+                    steps.push(
+                        { op: MacroOp.Press, arg: usage },
+                        { op: MacroOp.Wait, arg: tapMs },
+                        { op: MacroOp.Release, arg: usage },
+                    )
+                return
+            }
+            steps.push(...lowerMacroStep(s, diag, path))
+        })
         records.push({ steps })
     })
     return { records, index }
@@ -317,10 +342,10 @@ function lowerHoldTap(
         )
         return rec({ type: BehaviorType.None })
     }
-    if (def.holdTriggerKeyPositions?.length || def.holdTriggerOnRelease)
+    if (def.holdTriggerOnRelease)
         diag.warn(
-            `hold_tap "${action.ref}" positional-hold / hold-trigger-on-release ` +
-                `is not on the wire — dropped`,
+            `hold_tap "${action.ref}" hold-trigger-on-release is not on the ` +
+                `wire — dropped`,
             path,
         )
     const common = {
@@ -330,6 +355,11 @@ function lowerHoldTap(
         quickTapMs: def.quickTapMs ?? 0,
         requirePriorIdleMs: def.requirePriorIdleMs ?? 0,
         flags: def.retroTap ? BehaviorFlags.RETRO_TAP : 0,
+        // §28 positional hold: rides the record into TBL_POSHOLD (annotation,
+        // not part of the 16-byte record).
+        ...(def.holdTriggerKeyPositions?.length
+            ? { posHold: [...def.holdTriggerKeyPositions] }
+            : {}),
     }
 
     if (holdTok === 'kp' || holdTok === 'sk') {
@@ -550,15 +580,11 @@ function lowerAction(
             const usage = keyUsage(action.key, diag, path)
             if (usage === null) return rec({ type: BehaviorType.None })
             const bit = usageToModBit(usage)
-            if (bit === null) {
-                diag.error(
-                    `sticky_key "${action.key}" is not a modifier (one-shot ` +
-                        `non-mod keys not yet on the wire — §44.3)`,
-                    path,
-                )
-                return rec({ type: BehaviorType.None })
-            }
-            return rec({ type: BehaviorType.StickyMod, hold: bit })
+            // A modifier one-shot rides the sticky-mod path; any other usage is
+            // a one-shot key (BH_STICKY_KEY: held until the next key releases).
+            return bit !== null
+                ? rec({ type: BehaviorType.StickyMod, hold: bit })
+                : rec({ type: BehaviorType.StickyKey, tap: usage })
         }
         case 'key_toggle': {
             const usage = keyUsage(action.key, diag, path)
@@ -814,23 +840,38 @@ function lowerAction(
                     name: action.ref,
                 })
                 // ZMK keep-mods: trigger mods are suppressed from the morphed
-                // report unless kept. The firmware flag is all-or-nothing, so any
-                // keep-mods list keeps them all; a partial list warns.
-                const keep = def.keepMods ?? []
-                const suppress = keep.length === 0
-                if (keep.length && !def.mods.every((m) => keep.includes(m)))
-                    diag.warn(
-                        `mod_morph "${action.ref}" keepMods is a partial subset` +
-                            ` — per-mod suppression isn't on the wire; keeping ` +
-                            `all trigger mods`,
-                        path,
-                    )
+                // report unless kept. A partial keep list rides the explicit
+                // suppress mask in `tap` (trigger & ~kept); tap = 0 keeps the
+                // legacy whole-trigger suppression so old blobs are unchanged.
+                const trig = modsToMask(def.mods)
+                const keep = modsToMask(def.keepMods ?? [])
+                const suppress = trig & ~keep
                 return rec({
                     type: BehaviorType.ModMorph,
-                    hold: modsToMask(def.mods),
+                    hold: trig,
                     subCount: 2,
                     subIndex,
                     flags: suppress ? BehaviorFlags.MORPH_SUPPRESS_MODS : 0,
+                    tap: suppress !== 0 && suppress !== trig ? suppress : 0,
+                })
+            })
+        case 'grave_escape':
+            // QMK KC_GESC: Esc normally; with any Shift or GUI held it becomes
+            // grave/backtick. A MOD_MORPH under ANY-mod semantics; the trigger
+            // mods stay in the report (Shift+` must still type ~).
+            return withComposite('gesc:', comp, diag, path, () => {
+                const subIndex = comp.subs.length
+                comp.subs.push(
+                    rec({ type: BehaviorType.Key, tap: 0x29 }), // Escape
+                    rec({ type: BehaviorType.Key, tap: 0x35 }), // ` / ~
+                )
+                return rec({
+                    type: BehaviorType.ModMorph,
+                    // LSHIFT|RSHIFT|LGUI|RGUI (REMAPPR_MOD_* bits 1,5,3,7)
+                    hold: 0xaa,
+                    subCount: 2,
+                    subIndex,
+                    flags: BehaviorFlags.MORPH_ANY_MOD,
                 })
             })
         default:
@@ -1026,7 +1067,23 @@ function encodeBlob(
         .bindingTable(cells)
     // SUBS table (composite sub-behaviors) only when a mod-morph / tap-dance was
     // lowered; absent otherwise so existing composite-free goldens are unchanged.
+    // TBL_POSHOLD patches BEHAVIOR records only, so a positional hold-tap nested
+    // inside a composite loses its list — surface that instead of silence.
+    subs.forEach((s, si) => {
+        if (s.posHold) {
+            diag.warn(
+                `positional hold inside a composite is not on the wire — dropped`,
+                ['subs', si],
+            )
+            delete s.posHold
+        }
+    })
     if (subs.length > 0) builder.subsTable(subs)
+    // §28 positional hold-trigger lists, one entry per annotated BEHAVIOR record.
+    const posholds: PosholdRecord[] = behaviors.flatMap((b, i) =>
+        b.posHold?.length ? [{ behaviorIndex: i, positions: b.posHold }] : [],
+    )
+    if (posholds.length > 0) builder.posholdTable(posholds)
     if (macroRecords.length > 0) builder.macroTable(macroRecords)
     if (combos.length > 0) builder.comboTable(combos)
     if (conditionals.length > 0) builder.conditionalTable(conditionals)
