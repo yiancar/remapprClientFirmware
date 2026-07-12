@@ -11,6 +11,7 @@
 
 import { z } from 'zod'
 import { MODIFIERS, isKnownKeycode, isKnownKeyToken } from './keycodes'
+import { migrateToV1 } from './migrate'
 
 /* ── leaf vocabularies ─────────────────────────────────────────────────── */
 
@@ -1101,11 +1102,13 @@ export const ACTION_TYPES = [
 ] as const
 
 /**
- * Migrate a raw (pre-validation) object to the current schema version. Stub
- * today (only v1 exists); the seam keeps future bumps additive.
+ * Migrate a raw (pre-validation) object to the current v1 surface. A v2 document
+ * (ergonomic, hand-authorable — see docs/json-config.md) is down-converted to
+ * the identical v1 shape so normalize/compile stay byte-for-byte unchanged; a v1
+ * document passes through untouched.
  */
 export function migrate(raw: unknown): unknown {
-    return raw
+    return migrateToV1(raw)
 }
 
 /** Parse + validate JSON source into a validated SURFACE doc. Throws on invalid. */
