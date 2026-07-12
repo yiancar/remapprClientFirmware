@@ -175,7 +175,8 @@ export {
     KEYCODE_PALETTE,
 } from './editorMeta'
 
-// Side-effect imports: each concrete compiler self-registers on load.
+// Side-effect imports: each concrete compiler self-registers on load. The
+// remappr module also registers its sibling `remappr-board` shield/DT target.
 import './compilers/zmk'
 import './compilers/qmk'
 import './compilers/remappr'
