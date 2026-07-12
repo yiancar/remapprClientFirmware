@@ -392,6 +392,7 @@ function lowerHoldTap(
     diag: DiagnosticBag,
     path: (string | number)[],
     layerIndex: Map<string, number>,
+    quickTapDefault?: number,
 ): BehaviorRecord {
     const holdTok = def.bindings[0].replace(/^&/, '')
     const tapTok = def.bindings[1].replace(/^&/, '')
@@ -423,7 +424,7 @@ function lowerHoldTap(
         flavor: holdTapFlavorCode(def.flavor),
         tap,
         tappingTermMs: def.tappingTermMs ?? 0,
-        quickTapMs: def.quickTapMs ?? 0,
+        quickTapMs: def.quickTapMs ?? quickTapDefault ?? 0,
         requirePriorIdleMs: def.requirePriorIdleMs ?? 0,
         flags: def.retroTap ? BehaviorFlags.RETRO_TAP : 0,
         // §28 positional hold: rides the record into TBL_POSHOLD (annotation,
@@ -489,6 +490,10 @@ interface CompCtx {
     /** TBL_NAMES entries (§24) collected as composites are first lowered, keyed
      *  by the assigned sub_index so the firmware/app see the real name. */
     names: NameRecord[]
+    /** `defaults.quickTapMs` lowered into every tap-hold record that has no
+     *  explicit quickTap (quickTap has no global wire slot, so the default must
+     *  ride each record). Undefined = leave records at 0 (firmware default). */
+    quickTapDefault?: number
 }
 
 // Memoize a composite record by ref-key and guard against a definition that
@@ -602,7 +607,9 @@ function lowerAction(
                 flavor: flavorCode(action),
                 tap: tapUsage,
                 tappingTermMs: action.tappingTermMs ?? 0,
-                quickTapMs: action.quickTapMs ?? 0,
+                // Explicit per-action quickTap wins (including an explicit 0 =
+                // "no quick tap"); else the config default; else 0 = fw default.
+                quickTapMs: action.quickTapMs ?? comp.quickTapDefault ?? 0,
                 requirePriorIdleMs: action.requirePriorIdleMs ?? 0,
                 flags: action.retroTap ? BehaviorFlags.RETRO_TAP : 0,
                 // §28 positional hold rides the record into TBL_POSHOLD (an
@@ -886,7 +893,7 @@ function lowerAction(
                 diag.error(`unknown hold_tap "${action.ref}"`, path)
                 return rec({ type: BehaviorType.None })
             }
-            return lowerHoldTap(action, def, diag, path, layerIndex)
+            return lowerHoldTap(action, def, diag, path, layerIndex, comp.quickTapDefault)
         }
         case 'tap_dance':
             return withComposite(`td:${action.ref}`, comp, diag, path, () => {
@@ -1062,6 +1069,7 @@ function encodeBlob(
         memo: new Map(),
         inProgress: new Set(),
         names: [],
+        quickTapDefault: config.defaults?.quickTapMs,
     }
 
     // De-duplicated behavior table; bindings index into it.
@@ -1107,7 +1115,8 @@ function encodeBlob(
     // Combos (optional). Output is a bare behavior; positions index physical keys.
     const combos: ComboRecord[] = (config.combos ?? []).map((c, ci) => ({
         positions: c.keys,
-        timeoutMs: c.timeoutMs ?? 40,
+        // Per-combo timeout wins; else the config default; else the 40 ms fallback.
+        timeoutMs: c.timeoutMs ?? config.defaults?.comboTimeoutMs ?? 40,
         layer:
             c.layers && c.layers.length === 1
                 ? config.layers.findIndex((l) => l.name === c.layers![0])

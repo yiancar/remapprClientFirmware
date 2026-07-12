@@ -33,6 +33,12 @@ saved with it and its verbose v1 spelling parse to identical bytes. The legacy
 `keyboard` geometry is optional: omit it and the position count is taken from the
 longest layer's `keys` array (the builder supplies real geometry).
 
+`defaults.quickTapMs` and `defaults.comboTimeoutMs` lower into every tap-hold /
+combo that doesn't set its own — quick-tap has no global wire slot, so the
+compiler stamps the default onto each record (an explicit per-item value, or an
+explicit `quickTapMs: 0` meaning "no quick tap", always wins). `tappingTermMs`
+rides the LAYER table's global slot; `defaults.debounce` maps to the §20 tail.
+
 ## Layers and the `keys` array
 
 Each layer lists its bindings under `keys` (v1 called this `bindings`; both are
