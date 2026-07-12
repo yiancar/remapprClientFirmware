@@ -79,6 +79,10 @@ const withTimings = (
         ...(a.quickTapMs !== undefined && a.quickTapMs !== d.quickTapMs
             ? { quickTapMs: a.quickTapMs }
             : {}),
+        ...(a.requirePriorIdleMs
+            ? { requirePriorIdleMs: a.requirePriorIdleMs }
+            : {}),
+        ...(a.retroTap ? { retroTap: a.retroTap } : {}),
         ...(a.resolve !== undefined ? { resolve: a.resolve } : {}),
         ...(a.flavor !== undefined ? { flavor: a.flavor } : {}),
     }

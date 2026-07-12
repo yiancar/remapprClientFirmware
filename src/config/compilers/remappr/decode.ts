@@ -567,6 +567,8 @@ function tapHold(
     }
     if (rec.tappingTermMs) th.tappingTermMs = rec.tappingTermMs
     if (rec.quickTapMs) th.quickTapMs = rec.quickTapMs
+    if (rec.requirePriorIdleMs) th.requirePriorIdleMs = rec.requirePriorIdleMs
+    if (rec.flags & BehaviorFlags.RETRO_TAP) th.retroTap = true
     return th
 }
 

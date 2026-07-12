@@ -596,6 +596,8 @@ function lowerAction(
                 tap: tapUsage,
                 tappingTermMs: action.tappingTermMs ?? 0,
                 quickTapMs: action.quickTapMs ?? 0,
+                requirePriorIdleMs: action.requirePriorIdleMs ?? 0,
+                flags: action.retroTap ? BehaviorFlags.RETRO_TAP : 0,
             }
             if (action.hold.type === 'modifier') {
                 return rec({

@@ -92,12 +92,19 @@ export type CanonHoldTarget =
     | { type: 'modifier'; modifier: Modifier }
     | { type: 'layer'; layer: string }
 
+// pattern-check: skip — two additive optional fields on an existing interface, no abstraction
 export interface CanonTapHold {
     type: 'tap_hold'
     tap: CanonKeyPress
     hold: CanonHoldTarget
     tappingTermMs?: number
     quickTapMs?: number
+    /** Require the keyboard idle this long before the hold can trigger (§28);
+     *  0/absent = firmware default. Rides BEHAVIOR record r[12]. */
+    requirePriorIdleMs?: number
+    /** Retro-tap: emit the tap if the hold resolved but nothing was pressed
+     *  during it. Rides the RETRO_TAP behavior flag. */
+    retroTap?: boolean
     resolve?: Resolve
     /** Interrupt flavor. When this or a timing is set, ZMK gets a dedicated
      *  generated hold-tap node instead of the global &mt/&lt. */

@@ -187,6 +187,9 @@ function migrateTapHold(a: Obj): Obj {
     if (term !== undefined) out.tappingTermMs = term
     const quick = a.quickTapMs ?? a.quickTap
     if (quick !== undefined) out.quickTapMs = quick
+    if (a.requirePriorIdleMs !== undefined)
+        out.requirePriorIdleMs = a.requirePriorIdleMs
+    if (a.retroTap !== undefined) out.retroTap = a.retroTap
     if (a.flavor !== undefined) out.flavor = a.flavor
     if (a.resolve !== undefined) out.resolve = a.resolve
     return out
@@ -493,6 +496,9 @@ function compactTapHold(tap: unknown, hold: unknown, a: Obj): Obj {
     const out: Obj = { tap, hold: typeof hold === 'string' ? hold : holdToV2(hold) }
     if (a.tappingTermMs !== undefined) out.term = a.tappingTermMs
     if (a.quickTapMs !== undefined) out.quickTap = a.quickTapMs
+    if (a.requirePriorIdleMs !== undefined)
+        out.requirePriorIdleMs = a.requirePriorIdleMs
+    if (a.retroTap !== undefined) out.retroTap = a.retroTap
     if (a.flavor !== undefined) out.flavor = a.flavor
     if (a.resolve !== undefined) out.resolve = a.resolve
     return out

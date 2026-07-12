@@ -178,16 +178,27 @@ function normalizeTapTarget(tap: TapTarget): CanonKeyPress {
 const timings = (a: {
     tappingTermMs?: number
     quickTapMs?: number
+    requirePriorIdleMs?: number
+    retroTap?: boolean
     resolve?: 'timeout' | 'prefer-hold' | 'prefer-tap'
     flavor?: Extract<CanonAction, { type: 'tap_hold' }>['flavor']
 }): Pick<
     Extract<CanonAction, { type: 'tap_hold' }>,
-    'tappingTermMs' | 'quickTapMs' | 'resolve' | 'flavor'
+    | 'tappingTermMs'
+    | 'quickTapMs'
+    | 'requirePriorIdleMs'
+    | 'retroTap'
+    | 'resolve'
+    | 'flavor'
 > => ({
     ...(a.tappingTermMs !== undefined
         ? { tappingTermMs: a.tappingTermMs }
         : {}),
     ...(a.quickTapMs !== undefined ? { quickTapMs: a.quickTapMs } : {}),
+    ...(a.requirePriorIdleMs !== undefined
+        ? { requirePriorIdleMs: a.requirePriorIdleMs }
+        : {}),
+    ...(a.retroTap !== undefined ? { retroTap: a.retroTap } : {}),
     ...(a.resolve !== undefined ? { resolve: a.resolve } : {}),
     ...(a.flavor !== undefined ? { flavor: a.flavor } : {}),
 })

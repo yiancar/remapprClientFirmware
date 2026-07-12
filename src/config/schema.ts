@@ -150,6 +150,8 @@ export const HoldTargetSchema = z.discriminatedUnion('type', [
 const tapHoldTimings = {
     tappingTermMs: z.number().int().positive().optional(),
     quickTapMs: z.number().int().nonnegative().optional(),
+    requirePriorIdleMs: z.number().int().nonnegative().optional(),
+    retroTap: z.boolean().optional(),
     resolve: ResolveSchema.optional(),
     flavor: FlavorSchema.optional(),
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getCompiler, parseKeymap } from '../index'
 import { buildRemapprBlob } from '../compilers/remappr/index'
+import { decodeRemapprBlob } from '../compilers/remappr/decode'
 import { serializeKeymap, serializeKeymapV2 } from '../serialize'
 import {
     isV2,
@@ -298,6 +299,30 @@ describe('migrate: serialize emits v2 (up-migration)', () => {
         const v1 = JSON.parse(serializeKeymap(parseKeymap(V1)))
         expect(v1.schemaVersion).toBe(1)
         expect(v1.layers[0].bindings).toBeDefined()
+    })
+})
+
+// Phase 1 fidelity: inline tap-hold requirePriorIdleMs + retroTap now survive
+// compile -> decode (wire already carried them; encoder/decoder were dropping).
+describe('fidelity: tap-hold requirePriorIdleMs + retroTap round-trip', () => {
+    it('preserves both fields through compile + decode', () => {
+        const cfg = parseKeymap(`{
+            "version": 2, "kind": "remappr.keymap",
+            "meta": { "name": "F", "target": "zmk" },
+            "layers": [ { "name": "base", "keys": [
+                { "tap": "A", "hold": "LGui",
+                  "requirePriorIdleMs": 125, "retroTap": true },
+                "B"
+            ] } ]
+        }`)
+        const { blob } = buildRemapprBlob(cfg, { configVersion: 1 })
+        const decoded = decodeRemapprBlob(blob)
+        const th = decoded.config?.layers[0].bindings[0]
+        expect(th).toMatchObject({
+            type: 'tap_hold',
+            requirePriorIdleMs: 125,
+            retroTap: true,
+        })
     })
 })
 

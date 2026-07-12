@@ -87,7 +87,8 @@ real key token rather than silently dropping it.
 ```
 
 `hold` accepts a friendly modifier name (`LGui` → `LEFT_GUI`) or `layer:<name>`.
-Optional `term`/`tappingTermMs`, `quickTap`/`quickTapMs`, `flavor`, `resolve`.
+Optional `term`/`tappingTermMs`, `quickTap`/`quickTapMs`, `requirePriorIdleMs`,
+`retroTap`, `flavor`, `resolve` — all round-trip through compile + decode.
 
 ## Behavior definitions (dictionaries)
 
