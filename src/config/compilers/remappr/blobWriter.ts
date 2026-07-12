@@ -438,12 +438,29 @@ export class BlobBuilder {
         numPositions: number,
         defaultTermMs: number,
         releaseDebounceMs: number,
+        timing?: {
+            pressDebounceMs?: number
+            matrixPressDebounceMs?: number
+            matrixReleaseDebounceMs?: number
+        },
     ): this {
         this.tableBegin(TableId.Layer, 1)
         this.w.u16(numLayers)
         this.w.u16(numPositions)
         this.w.u16(defaultTermMs)
         this.w.u16(releaseDebounceMs)
+        // Optional §20 timing tail (firmware dlen >= 14): engine eager-press
+        // debounce + the matrix-scan debounce pair. 0 = keep the devicetree
+        // value, so the tail is emitted only when some field is set — an
+        // all-default config keeps the 8-byte layout (goldens unchanged).
+        const press = timing?.pressDebounceMs ?? 0
+        const mPress = timing?.matrixPressDebounceMs ?? 0
+        const mRelease = timing?.matrixReleaseDebounceMs ?? 0
+        if (press || mPress || mRelease) {
+            this.w.u16(press)
+            this.w.u16(mPress)
+            this.w.u16(mRelease)
+        }
         this.tableEnd()
         return this
     }

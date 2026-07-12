@@ -1168,10 +1168,14 @@ function encodeBlob(
     )
 
     const defaultTermMs = config.defaults?.tappingTermMs ?? 200
-    const releaseMs = 0
+    const releaseMs = config.defaults?.releaseDebounceMs ?? 0
 
     const builder = new BlobBuilder()
-        .layerTable(numLayers, numPositions, defaultTermMs, releaseMs)
+        .layerTable(numLayers, numPositions, defaultTermMs, releaseMs, {
+            pressDebounceMs: config.defaults?.pressDebounceMs,
+            matrixPressDebounceMs: config.defaults?.matrixPressDebounceMs,
+            matrixReleaseDebounceMs: config.defaults?.matrixReleaseDebounceMs,
+        })
         .behaviorTable(behaviors)
         .bindingTable(cells)
     // SUBS table (composite sub-behaviors) only when a mod-morph / tap-dance was

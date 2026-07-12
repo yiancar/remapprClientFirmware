@@ -849,3 +849,71 @@ describe('remappr §44.3 advanced gaps', () => {
         expect(u16(b, o + 6)).toBe(2)
     })
 })
+
+describe('LAYER §20 timing tail (runtime debounce)', () => {
+    const withDefaults = (defaults: Record<string, number>): string =>
+        TINY.replace(
+            '"defaults": { "tappingTermMs": 200 }',
+            `"defaults": ${JSON.stringify({ tappingTermMs: 200, ...defaults })}`,
+        )
+
+    it('stays at the 8-byte LAYER layout when no timing is set (goldens)', () => {
+        const b = bytesOf(parseKeymap(TINY))
+        const [start, end] = findTable(b, 1)!
+        expect(end - start).toBe(8)
+        expect(u16(b, start + 6)).toBe(0) // release_debounce_ms default
+    })
+
+    it('emits the 6-byte tail when any debounce default is set', () => {
+        const b = bytesOf(
+            parseKeymap(
+                withDefaults({
+                    releaseDebounceMs: 4,
+                    pressDebounceMs: 2,
+                    matrixPressDebounceMs: 3,
+                    matrixReleaseDebounceMs: 7,
+                }),
+            ),
+        )
+        const [start, end] = findTable(b, 1)!
+        expect(end - start).toBe(14)
+        expect(u16(b, start + 6)).toBe(4) // release_debounce_ms
+        expect(u16(b, start + 8)).toBe(2) // press_debounce_ms
+        expect(u16(b, start + 10)).toBe(3) // matrix_press_debounce_ms
+        expect(u16(b, start + 12)).toBe(7) // matrix_release_debounce_ms
+    })
+
+    it('emits the tail for a single matrix value (0 = keep devicetree)', () => {
+        const b = bytesOf(parseKeymap(withDefaults({ matrixReleaseDebounceMs: 9 })))
+        const [start, end] = findTable(b, 1)!
+        expect(end - start).toBe(14)
+        expect(u16(b, start + 8)).toBe(0)
+        expect(u16(b, start + 10)).toBe(0)
+        expect(u16(b, start + 12)).toBe(9)
+    })
+
+    it('round-trips the timing defaults through the decoder', () => {
+        const b = bytesOf(
+            parseKeymap(
+                withDefaults({
+                    releaseDebounceMs: 4,
+                    pressDebounceMs: 2,
+                    matrixPressDebounceMs: 3,
+                    matrixReleaseDebounceMs: 7,
+                }),
+            ),
+        )
+        const decoded = decodeRemapprBlob(b)
+        expect(decoded.code).toBe(DecodeCode.OK)
+        expect(decoded.config!.defaults).toMatchObject({
+            releaseDebounceMs: 4,
+            pressDebounceMs: 2,
+            matrixPressDebounceMs: 3,
+            matrixReleaseDebounceMs: 7,
+        })
+        // And an untailed blob decodes with none of them set.
+        const plain = decodeRemapprBlob(bytesOf(parseKeymap(TINY)))
+        expect(plain.code).toBe(DecodeCode.OK)
+        expect(plain.config!.defaults?.pressDebounceMs).toBeUndefined()
+    })
+})

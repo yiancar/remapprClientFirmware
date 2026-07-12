@@ -660,7 +660,17 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
     const numLayers = lr.u16()
     const numPositions = lr.u16()
     const defaultTermMs = lr.u16()
-    lr.u16() // release_debounce_ms — not modeled in ConfigDefaults
+    const releaseDebounceMs = lr.u16()
+    // Optional §20 timing tail (dlen >= 14): engine eager-press debounce + the
+    // matrix-scan debounce pair. 0 = keep the devicetree value.
+    let pressDebounceMs = 0
+    let matrixPressDebounceMs = 0
+    let matrixReleaseDebounceMs = 0
+    if (layerT.end - layerT.start >= 14) {
+        pressDebounceMs = lr.u16()
+        matrixPressDebounceMs = lr.u16()
+        matrixReleaseDebounceMs = lr.u16()
+    }
     if (numLayers === 0 || numPositions === 0) return fail(DecodeCode.BOUNDS)
 
     // ── BEHAVIOR (required) ──
@@ -785,7 +795,13 @@ export function decodeRemapprBlob(bytes: Uint8Array): DecodeResult {
         schemaVersion: 1,
         kind: 'remappr.keymap',
         meta: { name: 'Decoded keymap', target: 'remappr', version: String(configVersion) },
-        defaults: { tappingTermMs: defaultTermMs },
+        defaults: {
+            tappingTermMs: defaultTermMs,
+            ...(releaseDebounceMs ? { releaseDebounceMs } : {}),
+            ...(pressDebounceMs ? { pressDebounceMs } : {}),
+            ...(matrixPressDebounceMs ? { matrixPressDebounceMs } : {}),
+            ...(matrixReleaseDebounceMs ? { matrixReleaseDebounceMs } : {}),
+        },
         keyboard: { id: 'decoded', name: 'Decoded', keys },
         layers,
         ...(combos.length ? { combos } : {}),
