@@ -11,6 +11,10 @@ A document is v2 when its root has `"version": 2` (or `"schemaVersion": 2`).
 Anything else is treated as v1 and passes through untouched. Defaults are never
 serialized — omit any field you are happy to leave at the firmware default.
 
+`serializeKeymapV2()` writes this compact form (the mirror of the loader): a doc
+saved with it and its verbose v1 spelling parse to identical bytes. The legacy
+`serializeKeymap()` still emits v1.
+
 > Status: this file tracks what the migration currently accepts. Sections marked
 > _(planned)_ are reserved surface not yet wired.
 

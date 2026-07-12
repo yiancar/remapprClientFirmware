@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getCompiler, parseKeymap } from '../index'
 import { buildRemapprBlob } from '../compilers/remappr/index'
-import { serializeKeymap } from '../serialize'
+import { serializeKeymap, serializeKeymapV2 } from '../serialize'
 import {
     isV2,
     migrateAction,
@@ -231,6 +231,73 @@ describe('migrate: node/firmware/board sections', () => {
             "meta": { "name": "N" },
             "layers": [ { "name": "base", "keys": ["A","B"] } ] }`
         expect(bytesOf(SRC)).toEqual(bytesOf(bare))
+    })
+})
+
+describe('migrate: serialize emits v2 (up-migration)', () => {
+    const V1 = `{
+        "schemaVersion": 1, "kind": "remappr.keymap",
+        "meta": { "name": "RT", "target": "zmk" },
+        "keyboard": { "id": "rt", "name": "RT",
+            "keys": [{"x":0},{"x":1},{"x":2},{"x":3},{"x":4},{"x":5}] },
+        "defaults": { "tappingTermMs": 200 },
+        "layers": [
+            { "name": "base", "bindings": [
+                "A", "Ctrl+C",
+                { "type": "layer", "mode": "toggle", "layer": "nav" },
+                { "type": "sticky_key", "key": "LEFT_SHIFT" },
+                { "type": "tap_hold", "tap": "F",
+                  "hold": { "type": "modifier", "modifier": "LEFT_GUI" } },
+                { "type": "macro", "ref": "greet", "param": "A" }
+            ] },
+            { "name": "nav", "bindings": ["Left","Down","Up","Right","Home","End"] }
+        ],
+        "macros": [ { "id": "greet", "steps": [
+            { "type": "tap", "key": "H" }, { "type": "param" },
+            { "type": "wait", "ms": 20 }, { "type": "text", "text": "yo" }
+        ] } ],
+        "tapDances": [ { "id": "ec", "tappingTermMs": 200, "taps": [
+            { "count": 1, "action": "Esc" },
+            { "count": 2, "action": { "type": "caps_word" } } ] } ],
+        "conditionalLayers": [ { "ifLayers": ["nav"], "thenLayer": "base" } ]
+    }`
+
+    it('v2 output emits the compact grammar', () => {
+        const cfg = parseKeymap(V1)
+        const v2 = JSON.parse(serializeKeymapV2(cfg))
+        expect(v2.version).toBe(2)
+        expect(v2.schemaVersion).toBeUndefined()
+        expect(v2.layers[0].keys).toEqual([
+            'A',
+            'Ctrl+C',
+            'layer:nav:toggle',
+            'sticky:LEFT_SHIFT',
+            { tap: 'F', hold: 'Gui' },
+            'macro:greet(A)',
+        ])
+        expect(v2.macros.greet).toEqual(['H', 'param', 'wait:20', 'text:yo'])
+        expect(v2.tapDances.ec).toEqual({
+            '1': 'Esc',
+            '2': 'capsword',
+            timing: { tappingTermMs: 200 },
+        })
+        expect(v2.conditionalLayers).toEqual([{ if: ['nav'], then: 'base' }])
+    })
+
+    it('round-trips byte-identical (v1 -> canonical -> v2 -> canonical)', () => {
+        const cfg = parseKeymap(V1)
+        const viaV1 = getCompiler('remappr').compile(cfg).files[0]
+            .content as Uint8Array
+        const reparsed = parseKeymap(serializeKeymapV2(cfg))
+        const viaV2 = getCompiler('remappr').compile(reparsed).files[0]
+            .content as Uint8Array
+        expect(viaV2).toEqual(viaV1)
+    })
+
+    it('v1 serializer still emits v1 (unchanged)', () => {
+        const v1 = JSON.parse(serializeKeymap(parseKeymap(V1)))
+        expect(v1.schemaVersion).toBe(1)
+        expect(v1.layers[0].bindings).toBeDefined()
     })
 })
 

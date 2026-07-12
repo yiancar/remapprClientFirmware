@@ -397,3 +397,265 @@ export function migrateToV1(raw: unknown): unknown {
 
     return km
 }
+
+/* ── the up-migration (v1 surface object → v2) ─────────────────────────────
+ * The mirror of migrateToV1: collapse the verbose v1 surface object (the output
+ * of serialize's toSurfaceObject — strings for keys, objects for everything
+ * else) back into the compact v2 form so `save` emits friendly JSON. Anything
+ * without a clean compact spelling is left as its v1 object (lossless) — the
+ * round-trip stays byte-identical either way. */
+
+// pattern-check: skip — canonical→short modifier table, mirrors serialize FRIENDLY_MOD
+const HOLD_MOD_SHORT: Record<string, string> = {
+    LEFT_CTRL: 'Ctrl',
+    LEFT_SHIFT: 'Shift',
+    LEFT_ALT: 'Alt',
+    LEFT_GUI: 'Gui',
+    RIGHT_CTRL: 'RCtrl',
+    RIGHT_SHIFT: 'RShift',
+    RIGHT_ALT: 'RAlt',
+    RIGHT_GUI: 'RGui',
+}
+
+const KEYWORD_BY_TYPE: Record<string, string> = {
+    transparent: '___',
+    none: 'xxx',
+    caps_word: 'capsword',
+    key_repeat: 'repeat',
+    alt_repeat: 'altrepeat',
+    bootloader: 'bootloader',
+    reset: 'reset',
+    soft_off: 'softoff',
+    grave_escape: 'graveescape',
+    layer_lock: 'layerlock',
+}
+
+/** Collapse a v1 surface hold target `{type:'modifier'|'layer', …}` into the v2
+ *  string form; unknown shapes pass through. */
+function holdToV2(h: unknown): unknown {
+    if (!isObj(h)) return h
+    if (h.type === 'modifier' && typeof h.modifier === 'string') {
+        return HOLD_MOD_SHORT[h.modifier] ?? h.modifier
+    }
+    if (h.type === 'layer' && typeof h.layer === 'string') {
+        return `layer:${h.layer}`
+    }
+    return h
+}
+
+/** Collapse a v1 surface action (string or object) into the v2 form. */
+export function actionToV2(a: unknown): unknown {
+    if (typeof a === 'string') return a // bare / "Ctrl+C" key — already compact.
+    if (!isObj(a)) return a
+    switch (a.type) {
+        case 'key_press':
+            // toSurfaceObject already emits plain/modified keys as strings; an
+            // object here means something exotic — keep it lossless.
+            return a
+        case 'layer':
+            return a.mode === 'momentary'
+                ? `layer:${a.layer}`
+                : `layer:${a.layer}:${a.mode}`
+        case 'sticky_key':
+            return `sticky:${a.key}`
+        case 'macro':
+            return a.param !== undefined
+                ? `macro:${a.ref}(${a.param})`
+                : `macro:${a.ref}`
+        case 'tap_dance':
+            return `td:${a.ref}`
+        case 'mod_morph':
+            return `mm:${a.ref}`
+        case 'hold_tap':
+            return `ht:${a.ref}(${a.holdParam},${a.tapParam})`
+        case 'mouse_key':
+            return `mouse:${a.button}`
+        case 'mouse_move':
+            return `move:${a.direction}`
+        case 'mouse_scroll':
+            return `scroll:${a.direction}`
+        case 'tap_hold':
+            return compactTapHold(a.tap, a.hold, a)
+        case 'mod_tap':
+            return compactTapHold(a.tap, HOLD_MOD_SHORT[a.mod as string] ?? a.mod, a)
+        case 'layer_tap':
+            return compactTapHold(a.tap, `layer:${a.layer}`, a)
+        default:
+            if (typeof a.type === 'string' && a.type in KEYWORD_BY_TYPE) {
+                return KEYWORD_BY_TYPE[a.type]
+            }
+            return a // lossless fallback for the long tail.
+    }
+}
+
+/** Build the compact v2 tap-hold object, carrying only set timing fields. */
+function compactTapHold(tap: unknown, hold: unknown, a: Obj): Obj {
+    const out: Obj = { tap, hold: typeof hold === 'string' ? hold : holdToV2(hold) }
+    if (a.tappingTermMs !== undefined) out.term = a.tappingTermMs
+    if (a.quickTapMs !== undefined) out.quickTap = a.quickTapMs
+    if (a.flavor !== undefined) out.flavor = a.flavor
+    if (a.resolve !== undefined) out.resolve = a.resolve
+    return out
+}
+
+/** Collapse a v1 surface macro step into the v2 string form. */
+function macroStepToV2(s: unknown): unknown {
+    if (!isObj(s)) return s
+    switch (s.type) {
+        case 'tap':
+            return s.key
+        case 'press':
+            return `press:${s.key}`
+        case 'release':
+            return `release:${s.key}`
+        case 'wait':
+            return `wait:${s.ms}`
+        case 'text':
+            return `text:${s.text}`
+        case 'tap_time':
+            return `taptime:${s.ms}`
+        case 'param':
+            return s.from === undefined && s.to === undefined ? 'param' : s
+        case 'pause_for_release':
+            return 'pause'
+        default:
+            return s
+    }
+}
+
+/** `[{id, …def}]` → `{id: compactDef}`, preserving order. */
+function arrayToDict(
+    arr: unknown,
+    compact: (def: Obj) => unknown,
+): Obj | undefined {
+    if (!Array.isArray(arr)) return undefined
+    const out: Obj = {}
+    for (const def of arr) {
+        if (isObj(def) && typeof def.id === 'string') {
+            const { id, ...rest } = def
+            out[id] = compact(rest as Obj)
+        }
+    }
+    return out
+}
+
+/**
+ * Up-migrate a v1 surface object (as produced by serialize) into the compact v2
+ * form. Operates on the plain JSON object, not the canonical model, so it reuses
+ * every default-strip the v1 serializer already applied.
+ */
+export function migrateToV2(v1: unknown): unknown {
+    if (!isObj(v1)) return v1
+    const out: Obj = { ...v1 }
+    out.version = 2
+    delete out.schemaVersion
+
+    if (Array.isArray(out.layers)) {
+        out.layers = out.layers.map((l) => {
+            if (!isObj(l)) return l
+            const layer: Obj = { ...l }
+            if (Array.isArray(l.bindings)) {
+                layer.keys = l.bindings.map(actionToV2)
+                delete layer.bindings
+            }
+            return layer
+        })
+    }
+
+    const macros = arrayToDict(out.macros, (def) => {
+        const steps = Array.isArray(def.steps)
+            ? def.steps.map(macroStepToV2)
+            : []
+        // Plain macros collapse to a bare step array; keep the object form only
+        // when it carries extra metadata (params/description).
+        return def.params !== undefined || def.description !== undefined
+            ? { ...def, steps }
+            : steps
+    })
+    if (macros) out.macros = macros
+
+    const tapDances = arrayToDict(out.tapDances, (def) => {
+        const compact: Obj = {}
+        if (Array.isArray(def.taps)) {
+            for (const t of def.taps) {
+                if (isObj(t) && typeof t.count === 'number') {
+                    compact[String(t.count)] = actionToV2(t.action)
+                }
+            }
+        }
+        if (def.tappingTermMs !== undefined) {
+            compact.timing = { tappingTermMs: def.tappingTermMs }
+        }
+        if (def.hold !== undefined) compact.hold = holdToV2(def.hold)
+        if (def.description !== undefined) compact.description = def.description
+        return compact
+    })
+    if (tapDances) out.tapDances = tapDances
+
+    const modMorphs = arrayToDict(out.modMorphs, (def) => {
+        const compact: Obj = { on: def.mods }
+        if (Array.isArray(def.bindings)) {
+            compact.base = actionToV2(def.bindings[0])
+            compact.morphed = actionToV2(def.bindings[1])
+        }
+        if (def.keepMods !== undefined) compact.keepMods = def.keepMods
+        if (def.description !== undefined) compact.description = def.description
+        return compact
+    })
+    if (modMorphs) out.modMorphs = modMorphs
+
+    const holdTaps = arrayToDict(out.holdTaps, (def) => {
+        const compact: Obj = {}
+        if (def.flavor !== undefined) compact.flavor = def.flavor
+        const timing: Obj = {}
+        if (def.tappingTermMs !== undefined)
+            timing.tappingTermMs = def.tappingTermMs
+        if (def.quickTapMs !== undefined) timing.quickTapMs = def.quickTapMs
+        if (def.requirePriorIdleMs !== undefined)
+            timing.requirePriorIdleMs = def.requirePriorIdleMs
+        if (Object.keys(timing).length > 0) compact.timing = timing
+        const flags: Obj = {}
+        if (def.retroTap !== undefined) flags.retroTap = def.retroTap
+        if (def.holdTriggerOnRelease !== undefined)
+            flags.holdTriggerOnRelease = def.holdTriggerOnRelease
+        if (Object.keys(flags).length > 0) compact.flags = flags
+        if (def.holdTriggerKeyPositions !== undefined)
+            compact.positions = def.holdTriggerKeyPositions
+        // Preserve non-default inner bindings; drop the &kp/&kp default.
+        const b = def.bindings
+        if (
+            Array.isArray(b) &&
+            !(b.length === 2 && b[0] === '&kp' && b[1] === '&kp')
+        ) {
+            compact.bindings = b
+        }
+        if (def.description !== undefined) compact.description = def.description
+        return compact
+    })
+    if (holdTaps) out.holdTaps = holdTaps
+
+    if (Array.isArray(out.combos)) {
+        out.combos = out.combos.map((c) => {
+            if (!isObj(c)) return c
+            const combo: Obj = { ...c }
+            if (combo.action !== undefined) {
+                combo.do = actionToV2(combo.action)
+                delete combo.action
+            }
+            // Drop synthetic combo_N names (the migrate-down re-derives them).
+            if (typeof combo.name === 'string' && /^combo_\d+$/.test(combo.name)) {
+                delete combo.name
+            }
+            return combo
+        })
+    }
+
+    if (Array.isArray(out.conditionalLayers)) {
+        out.conditionalLayers = out.conditionalLayers.map((cl) => {
+            if (!isObj(cl)) return cl
+            return { if: cl.ifLayers, then: cl.thenLayer }
+        })
+    }
+
+    return out
+}

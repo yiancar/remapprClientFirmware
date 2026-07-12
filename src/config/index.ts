@@ -105,6 +105,7 @@ export {
     denormalizeAction,
     preferredSourceJson,
     serializeKeymap,
+    serializeKeymapV2,
     toSurfaceObject,
 } from './serialize'
 
