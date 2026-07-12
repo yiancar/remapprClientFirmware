@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getCompiler, parseKeymap } from '../index'
+import { buildRemapprBlob } from '../compilers/remappr/index'
 import {
     isV2,
     migrateAction,
@@ -196,5 +197,70 @@ describe('migrate: v2 ≡ v1 byte-identical', () => {
         // Compiles without a keyboard block (geometry synthesized from layer 0).
         const b = bytesOf(noBoard)
         expect(b.slice(0, 4)).toEqual(Uint8Array.from([0x52, 0x4d, 0x42, 0x43]))
+    })
+})
+
+describe('migrate: studio_unlock is rejected on remappr', () => {
+    it('emits a clear error, not a silent NONE', () => {
+        const cfg = parseKeymap(`{
+            "version": 2, "kind": "remappr.keymap",
+            "meta": { "name": "SU", "target": "zmk" },
+            "layers": [ { "name": "base",
+                "keys": ["A", { "type": "studio_unlock" }] } ]
+        }`)
+        const { diagnostics } = buildRemapprBlob(cfg, { configVersion: 1 })
+        const err = diagnostics.find(
+            (d) => d.level === 'error' && /studio_unlock/.test(d.message),
+        )
+        expect(err).toBeDefined()
+        expect(err?.message).toMatch(/RUCP control/)
+    })
+})
+
+// Guards the docs/json-config.md examples: a doc exercising the full v2 grammar
+// must compile with zero errors, so the reference never drifts from the code.
+describe('migrate: documented v2 grammar compiles clean', () => {
+    it('compiles the reference example', () => {
+        const cfg = parseKeymap(`{
+            "version": 2, "kind": "remappr.keymap",
+            "meta": { "name": "Ref" },
+            "defaults": { "tappingTermMs": 180, "quickTapMs": 120 },
+            "layers": [
+                { "name": "base", "keys": [
+                    "Q", "Ctrl+C", "␣",
+                    { "tap": "A", "hold": "LGui" },
+                    { "tap": "Space", "hold": "layer:nav", "term": 200 },
+                    "layer:nav", "layer:game:toggle", "sticky:LShift",
+                    "capsword", "repeat",
+                    "macro:email", "macro:greet(A)",
+                    "td:esc-caps", "mm:shift-del", "ht:home-row(LGui,A)",
+                    "mouse:left", "scroll:up", "___", "xxx"
+                ] },
+                { "name": "nav", "keys": ["Left","Down","Up","Right"] },
+                { "name": "game", "keys": ["1","2","3","4"] }
+            ],
+            "combos": [ { "keys": [0, 5], "do": "Esc", "timeoutMs": 30 } ],
+            "macros": {
+                "email": [ "text:me@example.com", "wait:50", "Enter" ],
+                "greet": [ "H", "param", "1" ]
+            },
+            "tapDances": {
+                "esc-caps": { "1": "Esc", "2": "capsword",
+                              "timing": { "tappingTermMs": 200 } }
+            },
+            "modMorphs": {
+                "shift-del": { "on": ["LShift","RShift"], "base": "Backspace",
+                               "morphed": "Delete", "keepMods": ["LShift"] }
+            },
+            "holdTaps": {
+                "home-row": { "flavor": "balanced",
+                    "timing": { "tappingTermMs": 220, "quickTapMs": 150 },
+                    "flags": { "retroTap": true },
+                    "positions": [3, 4] }
+            },
+            "conditionalLayers": [ { "if": ["nav", "game"], "then": "base" } ]
+        }`)
+        const { diagnostics } = buildRemapprBlob(cfg, { configVersion: 1 })
+        expect(diagnostics.filter((d) => d.level === 'error')).toEqual([])
     })
 })

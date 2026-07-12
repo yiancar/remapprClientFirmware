@@ -84,6 +84,8 @@ export function migrateAction(a: unknown): unknown {
         if (a.type === undefined && 'tap' in a && 'hold' in a) {
             return migrateTapHold(a)
         }
+        // Accept friendly modifier names in any explicit action object.
+        if (Array.isArray(a.mods)) return { ...a, mods: resolveMods(a.mods) }
         return a
     }
     if (typeof a !== 'string') return a
@@ -145,6 +147,15 @@ export function migrateAction(a: unknown): unknown {
             // against the actual key token, not a silently-dropped action.
             return s
     }
+}
+
+/** Resolve an array of friendly modifier names ("LShift") to canonical enum
+ *  values ("LEFT_SHIFT"); unknown tokens pass through for validation to report. */
+function resolveMods(mods: unknown): unknown {
+    if (!Array.isArray(mods)) return mods
+    return mods.map((m) =>
+        typeof m === 'string' ? (resolveModifier(m) ?? m) : m,
+    )
 }
 
 /** Resolve a v2 hold target string/object into a v1 HoldTarget. */
@@ -271,10 +282,10 @@ function migrateModMorphDef(id: string, raw: unknown): Obj {
         def.morphed ?? (Array.isArray(def.bindings) ? def.bindings[1] : undefined)
     const out: Obj = {
         id,
-        mods: def.on ?? def.mods,
+        mods: resolveMods(def.on ?? def.mods),
         bindings: [migrateAction(base), migrateAction(morphed)],
     }
-    if (def.keepMods !== undefined) out.keepMods = def.keepMods
+    if (def.keepMods !== undefined) out.keepMods = resolveMods(def.keepMods)
     if (def.description !== undefined) out.description = def.description
     return out
 }

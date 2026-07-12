@@ -715,6 +715,16 @@ function lowerAction(
                 type: BehaviorType.System,
                 tap: SystemAction[action.type],
             })
+        case 'studio_unlock':
+            // Not a keymap behavior on remappr: device unlock is a RUCP control
+            // op (the app holds an authenticated session), not a key binding.
+            // Reject cleanly instead of silently emitting NONE.
+            diag.error(
+                'studio_unlock is not a remappr keymap action — device unlock ' +
+                    'is handled by the RUCP control channel, not a key binding',
+                path,
+            )
+            return rec({ type: BehaviorType.None })
         case 'ext_power':
             // EXT_POWER toggle / on / off → BH_SYSTEM with the matching system
             // action code; the keyboard_node sink drives the board's ext_power
@@ -983,13 +993,17 @@ function lowerAction(
                     flags: BehaviorFlags.MORPH_ANY_MOD,
                 })
             })
-        default:
+        default: {
+            // Exhaustive over the CanonAction union; this guards against a new
+            // action type being added without a lowering arm.
+            const unhandled = action as { type?: string }
             diag.error(
-                `action "${action.type}" not yet supported by the remappr ` +
-                    `target (§44.3 gap)`,
+                `action "${unhandled.type ?? 'unknown'}" not yet supported by ` +
+                    `the remappr target (§44.3 gap)`,
                 path,
             )
             return rec({ type: BehaviorType.None })
+        }
     }
 }
 
