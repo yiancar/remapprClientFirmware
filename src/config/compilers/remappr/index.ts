@@ -15,6 +15,10 @@
 
 import type { ExportedFile } from '../../../types'
 import { HID_USAGE_BY_CANONICAL } from '../../../catalog/entries'
+// Side-effect: the sibling `board` module registers the `remappr-board` shield /
+// DT target, so loading the remappr compiler brings its full compile surface
+// (RMBC blob + board generator) with it — both live in this folder.
+import './board'
 import { DiagnosticBag, type Diagnostic } from '../../diagnostics'
 import {
     runCompile,
