@@ -12,6 +12,7 @@
 import { z } from 'zod'
 import { MODIFIERS, isKnownKeycode, isKnownKeyToken } from './keycodes'
 import { migrateToV1 } from './migrate'
+import { BUILTIN_TARGETS } from './types'
 
 /* ── leaf vocabularies ─────────────────────────────────────────────────── */
 
@@ -844,10 +845,7 @@ const BaseKeymapSchema = z.object({
         author: z.string().optional(),
         version: z.string().optional(),
         description: z.string().optional(),
-        target: z
-            .enum(['zmk', 'qmk', 'keychron', 'remappr'])
-            .nullable()
-            .default(null),
+        target: z.enum(BUILTIN_TARGETS).nullable().default(null),
         vendorId: z
             .string()
             .optional()
