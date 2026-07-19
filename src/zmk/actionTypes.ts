@@ -3,7 +3,7 @@ import type {
     BehaviorBindingParametersSet,
     BehaviorParameterValueDescription,
     GetBehaviorDetailsResponse,
-} from '@zmkfirmware/zmk-studio-ts-client/behaviors'
+} from '@yiancar/zmk-studio-ts-client/behaviors'
 import type { ActionSlot, ActionSlotKind, ActionType } from '@firmware/types'
 import { hidUsagePageAndIdFromUsage } from '@firmware/_app/lib/actions/hidUsages'
 import { MOUSE_COMMANDS } from '@firmware/mouseCommands'

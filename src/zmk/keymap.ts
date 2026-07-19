@@ -4,7 +4,7 @@ import type {
     Layer as ZmkLayer,
     PhysicalLayout as ZmkPhysicalLayout,
     PhysicalLayouts as ZmkPhysicalLayouts,
-} from '@zmkfirmware/zmk-studio-ts-client/keymap'
+} from '@yiancar/zmk-studio-ts-client/keymap'
 import type {
     Keymap,
     Layer,

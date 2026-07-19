@@ -1,6 +1,6 @@
 // Pattern check: Adapter (Tier 1) — extended — backs src/firmware/adapter.ts FirmwareAdapter; translates ZMK BehaviorBinding ↔ neutral KeyAction with slot-driven labels baked in.
-import type { BehaviorBinding } from '@zmkfirmware/zmk-studio-ts-client/keymap'
-import type { GetBehaviorDetailsResponse } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
+import type { BehaviorBinding } from '@yiancar/zmk-studio-ts-client/keymap'
+import type { GetBehaviorDetailsResponse } from '@yiancar/zmk-studio-ts-client/behaviors'
 import type {
     ActionSlot,
     HoldTapLabelData,

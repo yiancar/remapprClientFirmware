@@ -28,7 +28,7 @@ export { displayNameToBinding } from './displayNameToBinding'
 export { zmkKeymapToNeutral } from './keymap'
 
 // Re-exported upstream ZMK protocol types so renderer code never needs
-// to import @zmkfirmware/zmk-studio-ts-client directly. The firmware
+// to import @yiancar/zmk-studio-ts-client directly. The firmware
 // adapter mediates the protocol surface.
 export type {
     BehaviorBinding,

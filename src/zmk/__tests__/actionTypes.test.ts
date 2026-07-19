@@ -6,7 +6,7 @@
 // BT_SEL/BT_DISC set carrying the profile range); behaviorToActionType must
 // merge them rather than reading only metadata[0].
 import { describe, expect, it } from 'vitest'
-import type { GetBehaviorDetailsResponse } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
+import type { GetBehaviorDetailsResponse } from '@yiancar/zmk-studio-ts-client/behaviors'
 import { behaviorToActionType, synthesizeMouseActionType } from '../actionTypes'
 import { zmkCommandLegend, zmkShortMap } from '../paramLabel'
 import { BT, MT, OUT } from './behaviorFixtures'

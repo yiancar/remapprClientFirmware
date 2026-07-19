@@ -1,7 +1,7 @@
 // Pattern check: no GoF pattern (-) — rejected — unit tests over the ZMK
 // buildKeyLabel param-legend behavior (issue #147); test code, no pattern.
 import { describe, expect, it } from 'vitest'
-import type { BehaviorBinding } from '@zmkfirmware/zmk-studio-ts-client/keymap'
+import type { BehaviorBinding } from '@yiancar/zmk-studio-ts-client/keymap'
 import { buildKeyLabel } from '../actions'
 import {
     BT,
