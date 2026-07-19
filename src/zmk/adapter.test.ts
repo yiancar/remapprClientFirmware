@@ -36,6 +36,24 @@ vi.mock('@yiancar/zmk-studio-ts-client', () => ({
     try_get_lighting_capabilities: rpc.tryCapabilities,
 }))
 
+// ZmkKeyboardService needs these generated enums at runtime. Keep this adapter
+// unit test independent of Node ESM's inability to resolve ts-proto's
+// extensionless `protobufjs/minimal` import; build/typecheck exercise the real
+// published modules separately.
+vi.mock('@yiancar/zmk-studio-ts-client/keymap', () => ({
+    SaveChangesErrorCode: {
+        SAVE_CHANGES_ERR_NO_SPACE: 0,
+        SAVE_CHANGES_ERR_NOT_SUPPORTED: 1,
+    },
+}))
+
+vi.mock('@yiancar/zmk-studio-ts-client/core', () => ({
+    LockState: {
+        ZMK_STUDIO_CORE_LOCK_STATE_LOCKED: 0,
+        ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED: 1,
+    },
+}))
+
 import { zmkAdapter } from './adapter'
 
 function makeConnection(): RpcConnection {
