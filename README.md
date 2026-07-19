@@ -25,7 +25,7 @@ Scoped to GitHub Packages — consumers need an `.npmrc`:
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
-`@zmkfirmware/zmk-studio-ts-client` is a **peer dependency** (the ZMK transport contract).
+`@yiancar/zmk-studio-ts-client` is a **peer dependency** (the extended ZMK transport and lighting contract).
 
 ## Usage
 

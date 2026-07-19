@@ -4,20 +4,20 @@ import {
     Request,
     RequestResponse,
     RpcConnection,
-} from '@zmkfirmware/zmk-studio-ts-client'
-import type { GetBehaviorDetailsResponse } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
+} from '@yiancar/zmk-studio-ts-client'
+import type { GetBehaviorDetailsResponse } from '@yiancar/zmk-studio-ts-client/behaviors'
 import type {
     BehaviorBinding,
     Keymap as ZmkKeymap,
     PhysicalLayouts as ZmkPhysicalLayouts,
-} from '@zmkfirmware/zmk-studio-ts-client/keymap'
-import { SaveChangesErrorCode } from '@zmkfirmware/zmk-studio-ts-client/keymap'
-import { LockState as ZmkLockState } from '@zmkfirmware/zmk-studio-ts-client/core'
-import type { Notification } from '@zmkfirmware/zmk-studio-ts-client/studio'
+} from '@yiancar/zmk-studio-ts-client/keymap'
+import { SaveChangesErrorCode } from '@yiancar/zmk-studio-ts-client/keymap'
+import { LockState as ZmkLockState } from '@yiancar/zmk-studio-ts-client/core'
+import type { Notification } from '@yiancar/zmk-studio-ts-client/studio'
 
 import { filterCatalogByCodec } from '@firmware/catalog/filter'
 import type { KeyCatalog } from '@firmware/catalog/types'
-import type { Capabilities, KeyboardService } from '@firmware/service'
+import type { Capabilities, KeyboardService, RgbApi } from '@firmware/service'
 import type {
     ActionType,
     AdapterNotification,
@@ -42,6 +42,14 @@ import { zmkKeymapToNeutral } from './keymap'
 import { zmkNeutralToConfig } from './raise'
 import { serializeKeymap } from '@firmware/config'
 import { generateZMKConfigFile, generateZMKKeymapFile } from './export'
+import {
+    createZmkRgbController,
+    type ZmkRgbController,
+} from './rgb'
+import type {
+    LightingCapabilities,
+    LightingNotification,
+} from '@yiancar/zmk-studio-ts-client'
 
 const ZMK_CAPABILITIES: Capabilities = {
     lock: true,
@@ -97,6 +105,7 @@ type ClosedHandler = (reason?: unknown) => void
 export class ZmkKeyboardService implements KeyboardService {
     public readonly capabilities: Capabilities = ZMK_CAPABILITIES
     public readonly codec = zmkCodec
+    public readonly rgb?: RgbApi
 
     private readonly connection: RpcConnection
     private readonly behaviors: BehaviorMap = {}
@@ -121,11 +130,23 @@ export class ZmkKeyboardService implements KeyboardService {
     private pendingChanges = false
     private notificationLoop: Promise<void> | null = null
     private readonly notificationAbort = new AbortController()
+    private readonly rgbController?: ZmkRgbController
     public readonly deviceInfo: DeviceInfo
 
-    constructor(connection: RpcConnection, deviceInfo: DeviceInfo) {
+    constructor(
+        connection: RpcConnection,
+        deviceInfo: DeviceInfo,
+        lightingCapabilities?: LightingCapabilities,
+    ) {
         this.connection = connection
         this.deviceInfo = deviceInfo
+        if (lightingCapabilities) {
+            this.rgbController = createZmkRgbController(
+                connection,
+                lightingCapabilities,
+            )
+            this.rgb = this.rgbController.api
+        }
         this.notificationLoop = this.runNotificationLoop()
     }
 
@@ -198,6 +219,11 @@ export class ZmkKeyboardService implements KeyboardService {
         }
         if (subId === 'keymap' && eventName === 'unsavedChangesStatusChanged') {
             this.markPending(!!eventData)
+        }
+        if (subId === 'lighting') {
+            this.rgbController?.handleNotification(
+                subData as LightingNotification,
+            )
         }
     }
 

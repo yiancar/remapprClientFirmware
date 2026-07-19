@@ -244,6 +244,10 @@ export interface HsvColor {
 // pattern-check: skip — data contract field additions, no abstraction
 // Global backlight (RGB-matrix) effect state. `mode` indexes into RgbApi.effectNames.
 export interface RgbEffectState {
+    /** Optional master enable state. Firmwares without a runtime on/off control
+     *  omit it; capability-driven clients should only render a toggle when it
+     *  is present. */
+    enabled?: boolean
     mode: number
     brightness: number // 0..255
     speed: number // 0..255
@@ -251,13 +255,26 @@ export interface RgbEffectState {
 }
 
 export interface RgbApi {
-    getLedCount(): Promise<number>
+    getLedCount?(): Promise<number>
 
-    getIndicators(): Promise<IndicatorConfig>
+    getIndicators?(): Promise<IndicatorConfig>
 
-    setIndicators(cfg: IndicatorConfig): Promise<void>
+    setIndicators?(cfg: IndicatorConfig): Promise<void>
 
     save(): Promise<void>
+
+    /** Revert live preview state to the last saved device state. */
+    discard?(): Promise<RgbEffectState | void>
+
+    /** Lighting has its own persistence transaction and must not be folded into
+     *  the keymap service's pending state. */
+    hasPendingChanges?(): boolean
+
+    refreshPendingChanges?(): Promise<boolean>
+
+    onPendingChangesChanged?(cb: (pending: boolean) => void): () => void
+
+    onEffectChanged?(cb: (state: RgbEffectState) => void): () => void
 
     // Backlight effect mode. Presence of effectCatalog + get/setEffect enables the
     // "Backlight" tab; firmware that can't drive a global effect omits them.

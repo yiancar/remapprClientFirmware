@@ -74,7 +74,7 @@ export {
 // the user cancels a system picker (web-serial / web-bluetooth / native
 // equivalents). Surfaced from @firmware so the renderer never needs to
 // import @firmware/zmk for it.
-export { UserCancelledError } from '@zmkfirmware/zmk-studio-ts-client/transport/errors'
+export { UserCancelledError } from '@yiancar/zmk-studio-ts-client/transport/errors'
 
 export {
     resolveBindingLabels,

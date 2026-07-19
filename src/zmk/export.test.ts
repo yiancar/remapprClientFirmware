@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { generateZMKConfigFile, generateZMKKeymapFile } from './export'
 import type { KeyAction, Keymap, Layer } from '@firmware/types'
-import type { GetBehaviorDetailsResponse } from '@zmkfirmware/zmk-studio-ts-client/behaviors'
+import type { GetBehaviorDetailsResponse } from '@yiancar/zmk-studio-ts-client/behaviors'
 import {
     ALL_FIXTURES,
     BL,

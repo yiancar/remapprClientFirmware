@@ -2,8 +2,11 @@
 import {
     call_rpc,
     create_rpc_connection,
+    LightingTarget,
     RpcConnection,
-} from '@zmkfirmware/zmk-studio-ts-client'
+    try_get_lighting_capabilities,
+    type LightingCapabilities,
+} from '@yiancar/zmk-studio-ts-client'
 import type { Transport } from '@firmware/transport'
 
 import type {
@@ -76,6 +79,33 @@ async function probeDeviceInfo(
     ])
 }
 
+async function probeLightingCapabilities(
+    connection: RpcConnection,
+): Promise<LightingCapabilities | undefined> {
+    try {
+        return await try_get_lighting_capabilities(
+            connection,
+            LightingTarget.LIGHTING_TARGET_UNDERGLOW,
+        )
+    } catch {
+        // Lighting is optional. A broken/unsupported subsystem must not prevent
+        // the keyboard's keymap editor from connecting.
+        return undefined
+    }
+}
+
+async function createService(
+    connection: RpcConnection,
+    deviceInfo: DeviceInfo,
+): Promise<ZmkKeyboardService> {
+    const lightingCapabilities = await probeLightingCapabilities(connection)
+    return new ZmkKeyboardService(
+        connection,
+        deviceInfo,
+        lightingCapabilities,
+    )
+}
+
 export const zmkAdapter: FirmwareAdapter = {
     id: 'zmk',
     displayName: 'ZMK',
@@ -117,7 +147,7 @@ export const zmkAdapter: FirmwareAdapter = {
                 () => transport.abortController.abort(signal.reason),
                 { once: true },
             )
-            return new ZmkKeyboardService(cached.connection, cached.deviceInfo)
+            return createService(cached.connection, cached.deviceInfo)
         }
 
         const connection = create_rpc_connection(transport, { signal })
@@ -125,6 +155,6 @@ export const zmkAdapter: FirmwareAdapter = {
         if (!payload) {
             throw new Error('Failed to fetch device info from ZMK device')
         }
-        return new ZmkKeyboardService(connection, buildDeviceInfo(payload))
+        return createService(connection, buildDeviceInfo(payload))
     },
 }

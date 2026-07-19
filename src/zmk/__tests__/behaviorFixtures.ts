@@ -12,7 +12,7 @@
 import type {
     BehaviorParameterValueDescription,
     GetBehaviorDetailsResponse,
-} from '@zmkfirmware/zmk-studio-ts-client/behaviors'
+} from '@yiancar/zmk-studio-ts-client/behaviors'
 
 const HID_PAGE_KEYBOARD = 0x07
 const HID_PAGE_CONSUMER = 0x0c
