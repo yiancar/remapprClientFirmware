@@ -31,6 +31,16 @@ function hidTransport(vid: number): Transport {
     } as unknown as Transport
 }
 
+function bleTransport(firmwareAdapterId: string): Transport {
+    return {
+        label: 'Fake BLE',
+        firmwareAdapterId,
+        abortController: new AbortController(),
+        readable: new ReadableStream<Uint8Array>(),
+        writable: new WritableStream<Uint8Array>(),
+    } as unknown as Transport
+}
+
 // A generic (usage-page-only, no vendorIds) adapter that DESTROYS the shared
 // transport on probe — the real VIA failure mode that used to strand a later
 // specific adapter.
@@ -89,7 +99,10 @@ describe('pickAdapter — HID VID specificity', () => {
             ...vidSpecific('remappr-like', 0x1209),
             async canHandle(t: Transport) {
                 t.abortController.abort()
-                return { ok: false as const, reason: 'wrong vid, should not run' }
+                return {
+                    ok: false as const,
+                    reason: 'wrong vid, should not run',
+                }
             },
         })
         registerAdapter({
@@ -100,7 +113,10 @@ describe('pickAdapter — HID VID specificity', () => {
                 if (t.abortController.signal.aborted) {
                     return { ok: false as const, reason: 'dead' }
                 }
-                return { ok: true as const, deviceInfo: { name: 'g', firmware: 'g' } }
+                return {
+                    ok: true as const,
+                    deviceInfo: { name: 'g', firmware: 'g' },
+                }
             },
             async connect() {
                 throw new Error('unused')
@@ -112,5 +128,70 @@ describe('pickAdapter — HID VID specificity', () => {
 
         expect(winner?.id).toBe('generic-handler')
         expect(t.abortController.signal.aborted).toBe(false) // specific never probed
+    })
+})
+
+describe('pickAdapter — transport discovery ownership', () => {
+    it('probes only the adapter identified by the opened BLE service', async () => {
+        const { registerAdapter, pickAdapter } = await freshRegistry()
+        const wrongProbe = vi.fn(async (t: Transport) => {
+            t.abortController.abort()
+            return { ok: false as const, reason: 'wrong protocol' }
+        })
+        const ownerProbe = vi.fn(async () => ({
+            ok: true as const,
+            deviceInfo: { name: 'ZMK', firmware: 'zmk' },
+        }))
+
+        registerAdapter({
+            id: 'remappr',
+            displayName: 'Remappr',
+            discovery: { ble: { serviceUuid: 'remappr', charUuid: 'control' } },
+            canHandle: wrongProbe,
+            async connect() {
+                throw new Error('unused')
+            },
+        })
+        registerAdapter({
+            id: 'zmk',
+            displayName: 'ZMK',
+            discovery: { ble: { serviceUuid: 'zmk', charUuid: 'rpc' } },
+            canHandle: ownerProbe,
+            async connect() {
+                throw new Error('unused')
+            },
+        })
+
+        const transport = bleTransport('zmk')
+        const winner = await pickAdapter(transport, { transportKind: 'ble' })
+
+        expect(winner?.id).toBe('zmk')
+        expect(ownerProbe).toHaveBeenCalledOnce()
+        expect(wrongProbe).not.toHaveBeenCalled()
+        expect(transport.abortController.signal.aborted).toBe(false)
+    })
+
+    it('does not probe unrelated adapters when the discovered owner is unavailable', async () => {
+        const { registerAdapter, pickAdapter } = await freshRegistry()
+        const unrelatedProbe = vi.fn(async () => ({
+            ok: true as const,
+            deviceInfo: { name: 'wrong', firmware: 'wrong' },
+        }))
+        registerAdapter({
+            id: 'unrelated',
+            displayName: 'Unrelated',
+            discovery: { ble: { serviceUuid: 'other', charUuid: 'other' } },
+            canHandle: unrelatedProbe,
+            async connect() {
+                throw new Error('unused')
+            },
+        })
+
+        const winner = await pickAdapter(bleTransport('missing'), {
+            transportKind: 'ble',
+        })
+
+        expect(winner).toBeNull()
+        expect(unrelatedProbe).not.toHaveBeenCalled()
     })
 })

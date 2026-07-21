@@ -5,6 +5,10 @@ export type Transport = RpcTransport & {
     /** Optional VID/PID surfaced by HID transports (used by VIA registry lookup). */
     vid?: number
     pid?: number
+    /** Adapter identified by transport-level discovery (for example, the BLE
+     *  service/characteristic pair that successfully opened). Prevents a
+     *  non-owning protocol probe from consuming a single-use byte stream. */
+    firmwareAdapterId?: string
 }
 
 // pattern-check: skip mechanical move of existing pure helpers from qmk/adapter.ts (dedupe)

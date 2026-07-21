@@ -6,7 +6,8 @@ const adapters: FirmwareAdapter[] = []
 // HID probe ordering. A Transport's byte streams are single-use: a failed probe
 // by one adapter can lock or consume them (e.g. VIA's createHidClientFromTransport,
 // ZMK's pipeThrough), leaving nothing for the adapter that actually owns the
-// device. So over HID we try the owning adapter FIRST and never let a
+// device. So an authoritative transport owner is the only adapter probed;
+// over HID we otherwise try the owning adapter FIRST and never let a
 // guaranteed-miss adapter probe at all. An adapter whose HID filter names
 // vendorIds is *specific* — it only handles those VIDs (rank 0 = this device's
 // VID, rank 2 = guaranteed miss → skip). One with no vendorIds (usage-page-only,
@@ -36,7 +37,10 @@ export async function pickAdapter(
     // "No firmware adapter handled the device" on a Remappr USB keyboard). Serial
     // /BLE keep the original order — they do not key off a USB VID.
     let candidates = adapters
-    if (hint?.transportKind === 'hid') {
+    if (transport.firmwareAdapterId) {
+        const owner = adapters.find((a) => a.id === transport.firmwareAdapterId)
+        candidates = owner ? [owner] : []
+    } else if (hint?.transportKind === 'hid') {
         const { vid } = readTransportIds(transport)
         if (vid) {
             candidates = adapters
